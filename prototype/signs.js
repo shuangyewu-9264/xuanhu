@@ -214,7 +214,7 @@ const SIGNS = [
     test: s => s.glu > 25,
   },
   {
-    id: 'ketosis_pattern', name: '酮症酸中毒模式', level: 'warning',
+    id: 'ketosis_pattern', name: '高血糖伴酸中毒', level: 'warning',
     brief: '高血糖合并 HCO₃⁻ 下降与酸血症，符合酮症酸中毒的指标组合。',
     causes: '1 型糖尿病停用胰岛素、感染、饥饿、酒精',
     test: s => s.glu > 13 && s.hco3 < 18 && s.ph < 7.30,
@@ -246,7 +246,7 @@ const SIGNS = [
     test: s => s.rr < 5,
   },
   {
-    id: 'respiratory_failure_pattern', name: '呼吸衰竭模式', level: 'warning',
+    id: 'respiratory_failure_pattern', name: '通气与氧合衰竭', level: 'warning',
     brief: '低氧血症合并呼吸过速，提示呼吸衰竭正在发生。',
     causes: '重症肺炎、肺水肿、肺栓塞、哮喘持续状态',
     test: s => s.spo2 != null && s.spo2 < 90 && s.rr > 28,
@@ -374,7 +374,7 @@ const SIGNS = [
     test: s => s.cr > 200,
   },
   {
-    id: 'aki_pattern', name: '急性肾损伤模式', level: 'warning',
+    id: 'aki_pattern', name: '肾功能下降', level: 'warning',
     brief: '肌酐升高合并少尿，符合急性肾损伤的指标组合。',
     causes: '肾前性低灌注、肾毒性药物、梗阻、脓毒症',
     test: s => s.cr > 200 && s.uo < 0.5,
@@ -412,7 +412,7 @@ const SIGNS = [
     test: s => s.rr < 10 && s.gcs < 10,
   },
   {
-    id: 'thyroid_storm_pattern', name: '甲状腺危象模式', level: 'warning',
+    id: 'thyroid_storm_pattern', name: '高代谢状态', level: 'warning',
     brief: '高热合并明显心动过速，需考虑甲状腺危象。',
     causes: '甲亢未控制、感染、手术、停药',
     test: s => s.temp > 39 && s.hr > 130,
