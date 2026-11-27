@@ -13,7 +13,8 @@ async function main() {
     await page.locator('#btnMenu').click();
     const rows = page.locator('#sheetList .drow');
     await rows.filter({ hasText: '切换病例' }).click();
-    await rows.filter({ hasText: '高钾血症' }).click();
+    /* 病名已匿名化：教学病例按顺序列出，第 1 个就是高钾血症 */
+    await rows.filter({ hasText: '教学病例 1' }).click();
     const assessment = await page.evaluate(() => {
       const { S, E } = window.__LIFE_GAME;
       if (S.caseId !== 'hyperkalemia') throw Error('未能切换至固定病例');
