@@ -395,6 +395,95 @@ for (const id of ['hyperkalemia', 'dka', 'bleed', 'sepsis', 'opioid']) {
   check('出院遇到缺失血糖时提示复测', [dkaCases[0], others[0]].every(S =>
     [NaN, undefined, null].every(glu => glucoseReasons(S, glu).some(reason => reason.includes('需复测')))),
     'DKA 与通用判据均要求已知血糖');
+  const review = (S, glu, start) => E.glucoseReviewStatus({ ...S, glu }, start);
+  const general = others[0];
+  check('复查复用通用出院血糖边界', [3.96, 12.04].every(glu => {
+    const status = review(general, glu, 13);
+    return status.inTarget && status.reason === 'target' && status.target === '4–12 mmol/L';
+  }) && [3.94, 12.06].every(glu => !review(general, glu).inTarget), '监护读数 4.0 与 12.0 含边界');
+  check('DKA 复查复用出院血糖上限', dkaCases.every(S => {
+    const below = review(S, 10.94, 14);
+    const limit = review(S, 10.96, 14);
+    return below.glucose === 10.9 && below.reason === 'target' && below.target === '≥4 且 <11 mmol/L' &&
+      limit.glucose === 11 && !limit.inTarget && limit.reason === null;
+  }), '监护读数 10.9 达标，11.0 继续复查');
+  check('血糖复查识别反向恶化', [
+    [14.2, 12.3, null], [14.3, 12.3, 'worse'], [1.8, 3.7, null], [1.7, 3.7, 'worse'],
+    [3.9, 12.3, 'worse'], [12.1, 3.9, 'worse']
+  ].every(([glu, start, reason]) => review(general, glu, start).reason === reason),
+    '覆盖升降 1.9 与 2.0 mmol/L 以及跨过目标区间');
+  check('血糖复查保留缺测状态', [NaN, undefined, null].every(glu => {
+    const status = review(general, glu, 13);
+    return status.glucose === null && !status.inTarget && status.reason === 'missing';
+  }) && review(general, 13).reason === null, '缺少当前值时需复测，可单独评估当前读数');
+}
+{
+  const bed = E.create({ id: 'stable', init: { ...G.BASE, hr: 80, rr: 16, temp: 37, gcs: 15, k: 4, glu: 7 } });
+  bed.spo2 = 98;
+  const changeHr = hr => ({ hr, sv: bed.sv * bed.hr / hr });
+  const review = (start, change) => E.conditionReviewChange({ ...start, ...change }, E.conditionReviewBaseline(start));
+  const changes = [
+    ['心率', changeHr(94), changeHr(95), '80 → 95 次/分'],
+    ['呼吸频率', { rr: 12 }, { rr: 11 }, '16 → 11 次/分'],
+    ['收缩压', { cvp: bed.cvp + 14 }, { cvp: bed.cvp + 15 }, `${E.bp(bed).sys} → ${E.bp(bed).sys + 15} mmHg`],
+    ['血氧 SpO₂', { spo2: 95 }, { spo2: 94 }, '98 → 94 %'],
+    ['体温', { temp: 37.4 }, { temp: 37.5 }, '37.0 → 37.5 ℃'],
+    ['GCS', { gcs: 14 }, { gcs: 13 }, '15 → 13 分'],
+    ['血钾', { k: 4.4 }, { k: 4.5 }, '4.0 → 4.5 mmol/L'],
+  ];
+  check('病情复评识别显著体征变化并显示前后值', changes.every(([label, small, large, values]) =>
+    review(bed, small) === null && review(bed, large) === `${label} ${values}`),
+    '心率、呼吸、收缩压、血氧、体温、GCS、血钾');
+
+  const lowOxygen = { ...bed, spo2: 91 };
+  check('病情复评跨监护阈值需最小幅度', review(lowOxygen, { spo2: 92 }) === null &&
+    review(lowOxygen, { spo2: 93 }) === '血氧 SpO₂ 91 → 93 %' &&
+    review({ ...bed, rr: 23 }, { rr: 25 }) === '呼吸频率 23 → 25 次/分' &&
+    review({ ...bed, gcs: 12 }, { gcs: 11 }) === 'GCS 12 → 11 分' &&
+    review({ ...bed, k: 5.5 }, { k: 5.6 }) === null &&
+    review({ ...bed, k: 5.5 }, { k: 5.7 }) === '血钾 5.5 → 5.7 mmol/L',
+    '边界附近的小波动、跨阈值的改善和恶化');
+
+  const baseline = E.conditionReviewBaseline(bed);
+  check('病情复评从等待起点累计变化，重开后从新读数计', [81, 84, 94].every(hr =>
+    E.conditionReviewChange({ ...bed, ...changeHr(hr) }, baseline) === null) &&
+    E.conditionReviewChange({ ...bed, ...changeHr(95) }, baseline) === '心率 80 → 95 次/分' &&
+    review({ ...bed, ...changeHr(95) }, {}) === null,
+    '小变动累积达到门槛，原地重开继续等待');
+
+  const dka = E.create(G.generate(1, 13, ['dka']));
+  check('病情复评提示血糖达标、离开目标和双向明显变化', [
+    [bed, 12.1, 12, /12\.1 mmol\/L → 12\.0 mmol\/L.*进入本病例目标范围/],
+    [bed, 4, 3.9, /4\.0 mmol\/L → 3\.9 mmol\/L.*偏离本病例目标范围/],
+    [dka, 11, 10.9, /进入本病例目标范围（≥4 且 <11 mmol\/L）/],
+    [dka, 10.9, 11, /偏离本病例目标范围（≥4 且 <11 mmol\/L）/],
+    [dka, 15, 13, /15\.0 mmol\/L → 13\.0 mmol\/L/],
+    [dka, 13, 15, /13\.0 mmol\/L → 15\.0 mmol\/L/],
+    [bed, 7, null, /7\.0 mmol\/L → 缺测/],
+  ].every(([patient, start, glu, expected]) => expected.test(review({ ...patient, glu: start }, { glu }))) &&
+    review({ ...dka, glu: 15 }, { glu: 13.1 }) === null && review({ ...bed, glu: 7 }, { glu: 7.1 }) === null &&
+    review(bed, {}) === null, '通用与 DKA 目标边界，达标后重开、持续目标外、缺测和小幅波动');
+
+  check('病情复评识别床旁抽搐和心律状态变化',
+    review(bed, { seizure: 0.14 }) === null &&
+    review(bed, { seizure: 0.2 }) === '抽搐征象 未见抽搐 → 间断可见肢体抽动' &&
+    review({ ...bed, seizure: 0.65 }, { seizure: 0 }) === '抽搐征象 持续肢体抽搐 → 未见抽搐' &&
+    review(bed, { rhythm: 'vf' }) === '心律 窦性心律 → 心室颤动' &&
+    review({ ...bed, rhythm: 'asystole' }, { rhythm: 'sinus' }) === '心律 心静止 → 窦性心律',
+    '隐匿活动、发作、停止、心律恶化和恢复');
+
+  const bleeding = { ...bed, bleedingSites: { bleed: 0.01, spleen: 0.02 } };
+  const baselineBleeding = E.conditionReviewBaseline(bleeding);
+  E.setBleedingRate(bleeding, 'bleed', 0.005);
+  const slowed = E.conditionReviewChange(bleeding, baselineBleeding);
+  E.setBleedingRate(bleeding, 'bleed', 0);
+  const stopped = E.conditionReviewChange(bleeding, baselineBleeding);
+  const baselineStopped = E.conditionReviewBaseline(bleeding);
+  E.setBleedingRate(bleeding, 'bleed', 0.005);
+  check('病情复评按部位识别止血和再出血', slowed === null &&
+    stopped === '上消化道出血 活动性出血 → 已止血' &&
+    E.conditionReviewChange(bleeding, baselineStopped) === '上消化道出血 未见活动性出血 → 活动性出血',
+    '脾脏持续出血，上消化道出血先减缓再停止，随后复发');
 }
 {
   const cases = [E.create('hyperkalemia'), ...[['highK'], ['aki'], ['bph'], ['highK', 'aki']].map(ids =>
@@ -655,6 +744,7 @@ for (const id of ['hyperkalemia', 'dka', 'bleed', 'sepsis', 'opioid']) {
   const { cas, ...stored } = bed;
   const restored = Object.assign(makeBed(), JSON.parse(JSON.stringify(stored)));
   const control = Object.assign(makeBed(), JSON.parse(JSON.stringify(stored)), { deliveryStartedAt: null });
+  const beforeDelivery = E.conditionReviewBaseline(restored);
   advance(restored, 0.2);
   advance(control, 0.2);
   const completion = /胎盘已娩出/;
@@ -667,6 +757,10 @@ for (const id of ['hyperkalemia', 'dka', 'bleed', 'sepsis', 'opioid']) {
   check('分娩按模拟时间完成一次并开始产后观察', stayedPaused && stillPending && atBoundary &&
     restored.cost === action.cost && restored.log.filter(([, msg]) => completion.test(msg)).length === 1,
     '暂停期间冻结，临界点前重载，完成后再次执行');
+  check('病情复评在分娩完成时触发', E.conditionReviewChange(bed, beforeDelivery) === null &&
+    E.conditionReviewChange(restored, beforeDelivery) === '分娩已完成，胎盘已娩出，进入产后观察' &&
+    E.conditionReviewChange(restored, E.conditionReviewBaseline(restored)) === null,
+    '临界点前继续等待，分娩完成触发一次');
 
   const legacy = Object.assign(makeBed(), { t: 700, delivered: true, deliveryAt: 90, cost: action.cost });
   const legacyPlt = legacy.plt;
