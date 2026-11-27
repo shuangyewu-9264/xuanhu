@@ -229,7 +229,7 @@ const MODULES = [
     history:[[2880, '病史回顾', '开始发热、心悸，伴烦躁。']],
     medicalHistory:['甲状腺功能亢进'],
     medicationHistory:['近期停用抗甲状腺药'],
-    goal:['心率 <120','体温 <38.5','意识恢复'],
+    goal:['心率 <120','体温 ≤ 37.8','意识恢复'],
     /* temp 已由全局判据覆盖；用"甲状腺毒症控制度"替代原来的体温重复判据 */
     check:S=>[ (S.thyroidHeatDrive ?? 0.70) > 0.26 ? '甲状腺毒症尚未控制' : null ].filter(Boolean),
     hint:'β 阻滞剂压心率，抗甲状腺药阻断合成，激素抑制转化。',
@@ -608,7 +608,7 @@ const MODULES = [
            contractility:0.84, heatstrokeDrive:1.30 },
     drivers:{ kProd:0.016, lactProd:0.08 },
     history:[[null, '现场人员转述', '在高温环境中持续暴露约四小时，随后晕倒。']],
-    goal:['核心体温 < 38.5','收缩压 ≥ 90','意识恢复'],
+    goal:['核心体温 ≤ 37.8','收缩压 ≥ 90','意识恢复'],
     hint:'热射病需尽快散热。在「环境 / 场景」开启物理降温，同时补液并监测血压。',
     advance(S, dtMin){
       const recovering = S.heatstrokeCooled && !S.env?.heat;
@@ -877,7 +877,13 @@ const MODULES = [
 ];
 
 /* 保留模块摘要供百科、脚本等直接读取。 */
-for (const m of MODULES) m.complaint = m.history.map(([, , text]) => text).join('');
+/* 主诉按病历书写规范单独成句（症状 + 持续时间），现病史取 history 时间线。
+   complaint 保留为现病史全文，供百科与分享使用。 */
+const CHIEF_COMPLAINTS = {"highK": "少尿伴心悸、乏力2天", "dka": "多饮多尿3天，恶心呕吐1天", "bleed": "呕血、黑便1天", "sepsis": "发热3天，意识模糊6小时", "opioid": "被发现呼之不应、呼吸浅慢1小时", "edema": "气促1天，不能平卧6小时", "thyroid": "发热、心悸伴烦躁2天", "hypogly": "大汗、意识模糊2小时", "asthma": "喘息、胸闷1天，加重3小时", "organophosphate": "误服农药后呕吐、大汗2小时", "apap": "恶心、上腹不适4小时", "htnEmergency": "剧烈头痛、视物模糊6小时", "hyponatremia": "乏力、嗜睡2天，意识模糊6小时", "pe": "突发胸痛、气促2小时", "ptx": "外伤后左胸痛、气促1小时", "trauma": "车祸后右大腿疼痛、出血2小时", "pancreatitis": "上腹剧痛伴呕吐1天", "hhs": "乏力、嗜睡3天，意识模糊6小时", "co": "头晕、意识模糊2小时", "aki": "尿少伴恶心、水肿5天", "tamponade": "胸部外伤后胸闷、气促2小时", "heatstroke": "高温暴露后晕倒1小时", "myxedema": "反应迟钝、面部浮肿1天", "liverFailure": "皮肤黄染1周，嗜睡2天", "tca": "服药过量后口干、意识模糊2小时", "tbi": "头部外伤后嗜睡、呕吐2小时", "burn": "火灾后烧伤伴气促1小时", "stemi": "胸骨后压榨样疼痛3小时", "seizure": "持续抽搐30分钟", "spleen": "左上腹外伤后疼痛、面色苍白2小时", "ectopic": "停经7周，突发下腹痛伴晕厥2小时", "preeclampsia": "头痛、视物模糊1天", "bph": "排尿困难、下腹胀痛1天"};
+for (const m of MODULES) {
+  m.complaint = m.history.map(([, , text]) => text).join('');
+  m.chief = CHIEF_COMPLAINTS[m.id] || m.complaint;
+}
 
 /* ---------- 组合 ---------- */
 function pick(rnd, arr, n) {
@@ -1224,7 +1230,10 @@ function generateCase(difficulty, seed, only, genVersion) {
   return {
     id: 'gen', name: names, tags, diff, genVersion,
     age, sex, weight, patient, bloodType: ['A','B','O','AB'][Math.floor(rnd()*4)],
-    complaint, admission, traits,
+    complaint,
+    /* 主诉 = 主要症状 + 持续时间；并发病史只进现病史 */
+    chief: primary.map(m => m.chief).filter(Boolean).join('；') || complaint,
+    admission, traits,
     comorbidities,
     init,
     goals: Array.from(new Set(primary.flatMap(m => m.goal))),
