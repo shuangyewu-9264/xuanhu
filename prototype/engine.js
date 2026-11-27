@@ -60,7 +60,8 @@ const CASES = {
     name: '高钾血症',
     comorbidities: ['慢性肾病'],
     age: 45, sex: '男', weight: 72, bloodType: 'A',
-    complaint: '突发心悸、乏力 6 小时，进行性加重。慢性肾病 3 期，近 2 日尿量减少。',
+    chief: '少尿伴心悸、乏力2天',
+      complaint: '2 天前起尿量明显减少，1 天前出现心悸、乏力并逐渐加重。既往慢性肾病 3 期。',
     init: {
       vol: 4.25, k: 6.8, na: 134, cl: 100, ca: 1.15, hco3: 14, lac: 3.4, glu: 5.6,
       cr: 268, bun: 18.2, hb: 112, wbc: 8.1, plt: 210,
@@ -78,7 +79,8 @@ const CASES = {
     id: 'dka', name: '糖尿病酮症酸中毒',
     comorbidities: ['1 型糖尿病'],
     age: 23, sex: '女', weight: 58, bloodType: 'O',
-    complaint: '多饮多尿 3 天，恶心呕吐 1 天，今晨嗜睡。1 型糖尿病，擅自停用胰岛素。',
+    chief: '多饮多尿3天，恶心呕吐伴嗜睡1天',
+      complaint: '3 天前起多饮、多尿，1 天前出现恶心、呕吐，今晨嗜睡。1 型糖尿病，自行停用胰岛素。',
     init: {
       vol: 3.6, k: 4.9, na: 130, cl: 98, ca: 1.12, hco3: 8, lac: 2.6, glu: 28.5,
       cr: 156, bun: 14.5, hb: 128, wbc: 14.2, plt: 260,
@@ -95,7 +97,8 @@ const CASES = {
     id: 'bleed', name: '上消化道大出血',
     comorbidities: ['消化性溃疡'],
     age: 61, sex: '男', weight: 78, bloodType: 'B',
-    complaint: '呕血 2 次、黑便 1 天，起身时晕厥。长期服用阿司匹林。',
+    chief: '呕血、黑便1天伴晕厥1次',
+      complaint: '1 天前起呕血 2 次、排黑便，起身时晕厥 1 次。长期服用阿司匹林。',
     init: {
       vol: 3.9, k: 4.1, na: 138, cl: 104, ca: 1.18, hco3: 21, lac: 2.9, glu: 7.2,
       cr: 96, bun: 24.5, hb: 78, wbc: 11.5, plt: 180,
@@ -118,7 +121,8 @@ const CASES = {
     id: 'sepsis', name: '感染性休克',
     comorbidities: ['肺部感染'],
     age: 67, sex: '男', weight: 70, bloodType: 'O',
-    complaint: '发热咳嗽 3 天，今日意识模糊、尿少，皮肤花斑。',
+    chief: '发热咳嗽3天，意识模糊伴尿少1天',
+      complaint: '3 天前起发热、咳嗽，1 天前出现意识模糊、尿量减少，皮肤花斑。',
     init: {
       vol: 3.70, k: 4.3, na: 132, cl: 98, ca: 1.15, hco3: 17, lac: 5.8, glu: 8.2,
       cr: 186, bun: 24.0, hb: 108, wbc: 19.5, plt: 140,
@@ -141,7 +145,8 @@ const CASES = {
     id: 'opioid', name: '阿片类药物过量',
     comorbidities: [],
     age: 29, sex: '女', weight: 55, bloodType: 'A',
-    complaint: '被发现倒在房间内，呼之不应，呼吸浅慢，针尖样瞳孔。',
+    chief: '被发现呼之不应、呼吸浅慢1小时',
+      complaint: '1 小时前被发现倒在房间内，呼之不应，呼吸浅慢，双侧瞳孔针尖样缩小。',
     init: {
       vol: 4.30, k: 4.2, na: 138, cl: 102, ca: 1.18, hco3: 26, lac: 1.6, glu: 5.4,
       cr: 78, bun: 4.5, hb: 128, wbc: 7.2, plt: 230,
