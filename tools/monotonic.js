@@ -1,7 +1,7 @@
 ﻿/* 因果方向测试：只验证"方向对不对"，不验证具体数值。
  * 这类 bug（升压药越给越降、高钾心率升、抗凝药促出血）靠"能出院/会死"是测不出来的。
  *
- * 用法：D:\devkit\node\node.exe tools/monotonic.js
+ * 用法：node tools/monotonic.js
  */
 require('../prototype/substances.js');
 require('../prototype/traits.js');

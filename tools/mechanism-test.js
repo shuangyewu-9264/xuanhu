@@ -6,7 +6,7 @@
  *     Δ = 同一病理下「给这个操作 60 min 后」−「什么都不做 60 min 后」
  * 因此年龄/体重/种子带来的个体差异被消掉，剩下的纯粹是该操作的机制效应。
  *
- * 用法：D:\devkit\node\node.exe tools/mechanism-test.js
+ * 用法：node tools/mechanism-test.js
  * ========================================================================== */
 require('../prototype/substances.js');
 require('../prototype/mentor.js');

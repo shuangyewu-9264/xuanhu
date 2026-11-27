@@ -2,7 +2,9 @@
 """把隐私政策生成一个可部署的静态页面 dist/privacy.html"""
 import os
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 DIST = os.path.join(ROOT, 'dist')
 
 HTML = """<!DOCTYPE html>

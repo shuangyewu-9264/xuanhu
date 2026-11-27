@@ -3,9 +3,12 @@
    1) 双击直接打开（file:// 也能跑）
    2) 上传到任意静态托管 / 交给平台托管
 """
-import os, re, io
+import re, io
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+import os
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 SRC = os.path.join(ROOT, 'prototype')
 OUT_DIR = os.path.join(ROOT, 'dist')
 

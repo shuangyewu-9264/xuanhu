@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """重建下载页：用根相对路径（/web/、/single、/apk），桥接与静态站根目录都能用。"""
-import os, glob, re
+import glob, re
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+import os
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 DIST = os.path.join(ROOT, 'dist')
 
 ver = '0.0.0'

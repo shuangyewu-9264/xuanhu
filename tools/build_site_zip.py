@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """用 Python 的 zipfile 重打部署包，保证内部路径是正斜杠 /（Netlify 认这个）。"""
-import os, zipfile
+import zipfile
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+import os
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 DEP = os.path.join(ROOT, 'dist', '部署包')
 OUT = os.path.join(ROOT, 'dist', '悬壶-网站包.zip')
 

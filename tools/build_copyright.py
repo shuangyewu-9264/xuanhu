@@ -3,13 +3,16 @@
    1) 源代码文档.docx  —— 前 30 页 + 后 30 页，每页 50 行
    2) 软件说明书.docx  —— 用户手册（约 20 页）
 """
-import os, glob
+import glob
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml.ns import qn
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+import os
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 OUT = os.path.join(ROOT, '软著')
 os.makedirs(OUT, exist_ok=True)
 

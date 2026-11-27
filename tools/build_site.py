@@ -7,9 +7,12 @@
    xuanhu.apk          = 最新安装包
    xuanhu-single.html  = 单文件版
 """
-import os, shutil, json, glob, re
+import shutil, json, glob, re
 
-ROOT = r'D:\文档\deepseek-harness\default-workspace\lifegame'
+import os
+from pathlib import Path
+
+ROOT = str(Path(__file__).resolve().parent.parent)
 PROTO = os.path.join(ROOT, 'prototype')
 DIST = os.path.join(ROOT, 'dist')
 DEP = os.path.join(DIST, '部署包')
