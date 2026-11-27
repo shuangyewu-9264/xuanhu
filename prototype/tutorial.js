@@ -12,7 +12,7 @@ const PAGES = [
       <div class="tut-h">先记住三件事</div>
       <div class="tut-row"><b>点器官</b><span>中间的器官图，点哪个就看哪个的参数</span></div>
       <div class="tut-row"><b>给药</b><span>在底栏点「给药」，核对患者后选择药物、途径和剂量</span></div>
-      <div class="tut-row"><b>加速</b><span>右上角 4× / 16×，让时间走快一点，观察病情变化</span></div>
+      <div class="tut-row"><b>时间控制</b><span>顶部可以暂停或选倍速。「等病情变化」会快进，遇到变化后恢复 1×。</span></div>
       <div class="tut-note">看数据 → 做处理 → 看变化。这就是全部。</div>`,
   },
   {
@@ -55,7 +55,7 @@ const PAGES = [
       <div class="tut-row"><b>术语表</b><span>65 条医学名词的解释和正常范围。点击界面上的状态标签、生命体征标签，也能直接看解释。</span></div>
       <div class="tut-row"><b>病房床位</b><span>最多同时管 4 张床，时间同步流逝。底部胶囊显示床位状态，点一下就能切换；哪个床出院或死亡，床位就空出来。</span></div>
       <div class="tut-row"><b>统计</b><span>治愈率、平均耗时费用、最常遇到的诊断与最常犯的错。</span></div>
-      <div class="tut-row"><b>暂停</b><span>菜单里可以暂停，所有床位同时停住——想清楚再继续。</span></div>
+      <div class="tut-row"><b>暂停</b><span>点击顶部倍速左侧的「暂停」，所有床位同时停表；点击「继续」恢复。</span></div>
       <div class="tut-note">可以随时从「病房」返回大厅查看床位。</div>`,
   },
   {
