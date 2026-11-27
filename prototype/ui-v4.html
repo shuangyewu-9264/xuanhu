@@ -270,8 +270,9 @@ button { color: inherit; }
 
 .opan { display: grid; gap: 6px; }
 .opan.hide { display: none; }
-.opan .examine-lungs { justify-self: start; color: var(--accent); cursor: pointer; }
+.opan .organ-action { justify-self: start; color: var(--accent); cursor: pointer; }
 #vascularTone { padding: 4px 0; color: var(--ink-2); font-size: 12px; }
+#conditionReviewResult { margin: 0 0 8px; color: var(--ink-2); font-size: 12px; }
 .opan .row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -573,7 +574,7 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
   .top {
     display: grid;
     grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
-    grid-template-areas: "ward patient clock" "level ask speed";
+    grid-template-areas: "ward patient clock" "level ask budget" "speed speed speed";
     gap: 5px 6px;
     padding-top: calc(var(--safe-t) + 7px);
     padding-bottom: 7px;
@@ -587,8 +588,8 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
   #levelPill { grid-area: level; justify-self: start; }
   #btnAsk { grid-area: ask; justify-self: start; }
   #levelPill, #btnAsk { min-height: 30px; padding: 2px 5px; }
-  #budgetChip { grid-column: 1 / -1; grid-row: 3; justify-self: end; max-width: 100%; }
-  #speed { grid-area: speed; justify-self: end; }
+  #budgetChip { grid-area: budget; justify-self: end; align-self: center; max-width: 100%; }
+  #speed { grid-area: speed; justify-self: stretch; justify-content: space-between; }
   .seg .pill { padding-inline: 5px; }
 }
 
@@ -787,10 +788,12 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
     <span class="sp"></span>
     <span class="pill num" id="clock" role="timer" aria-label="病例用时">02:14</span>
     <div class="seg" id="speed" role="group" aria-label="模拟速度">
+      <button class="pill" id="pause" type="button" aria-pressed="false">暂停</button>
       <button class="pill on" type="button" data-s="1" aria-pressed="true">1×</button>
       <button class="pill" type="button" data-s="4" aria-pressed="false">4×</button>
       <button class="pill" type="button" data-s="16" aria-pressed="false">16×</button>
       <button class="pill ff" id="ff" type="button" aria-pressed="false">快进 20×</button>
+      <button class="pill" id="conditionWait" type="button" aria-pressed="false" title="推进全病房，直到出现明显变化、检查回报或达到 6 个模拟小时">等病情变化</button>
     </div>
   </header>
 
@@ -798,6 +801,7 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
     <div class="rail">
       <section class="panel monitor-panel" aria-labelledby="monitorTitle">
         <h2 class="panel-title" id="monitorTitle">生命体征</h2>
+        <p id="conditionReviewResult" role="status" hidden></p>
         <div id="vitals"></div>
       </section>
       <div id="mentorSlot"></div>
