@@ -25,6 +25,40 @@ python -m http.server 8000 --directory web
 - 选中心脏可查看最近 4 秒的单导联心电图。床旁的心搏音随 R 峰触发，游戏快进时仍按实时心率播放。静音不影响波形。
 - 大厅及从大厅打开的工具页只播放高优先级报警。各床位独立报警，室颤响三短声，心静止响较轻的持续音。音量默认 20%，可调节或静音。
 
+## 技术要点
+
+### 机制驱动而非规则驱动
+
+```js
+// ❌ 规则驱动：同一个操作在任何病情下结果一样
+if (给了胰岛素) 血钾 -= 1.2;
+
+// ✅ 机制驱动：模块只写驱动，引擎统一推导
+S.svrDrive = Math.min(16, (S.svrDrive || 8) + 0.012 * dtMin);
+const toneTarget = clamp(17.5 * baro * (0.45 + 0.55 * reserve) * pressorGain
+    - (S.infection || 0) * 11.0
+    + (S.svrDrive || 0)
+    + clamp(((S.icp || 0) - 0.60) * 45, 0, 18), 4, 42);
+```
+
+### 氧合：分流方程
+
+```js
+// SaO₂ = (1−Qs/Qt)·Hill(PaO₂) + Qs/Qt·SvO₂
+// SvO₂ 由 Fick 方程推出：SvO₂ = 1 − VO₂/DO₂
+S.sao2 = clamp((1 - S.shunt) * hill(S.pao2) + S.shunt * svo2Prev, 0.15, 1);
+```
+
+同样的分流，循环越差血氧越低——这是机制自然产生的，不是特判。
+
+### 出血按部位记账
+
+```js
+// 每个出血点独立计速率，止血只影响对应部位
+S.bleedingSites[site] = rate;
+S.bleedRate = Object.values(S.bleedingSites).reduce((a, b) => a + b, 0);
+```
+
 ## 构建与发布
 
 在仓库根目录使用 Python 3.8 或更高版本。网页构建只使用 Python 标准库。
@@ -55,5 +89,14 @@ python tools/build_site.py --check-web
 开发者从 Git 克隆仓库后，可用 Node.js 20 或更高版本运行 `npm test` 验证生理引擎、病例和心电时序。`npm ci` 后运行 `npm run test:browser` 可在浏览器复核出院和归档；可以使用本机 Edge 或通过 `BROWSER_EXECUTABLE` 指定 Chromium 浏览器。发布用的源码 ZIP 和网站包仅包含运行与构建所需的内容及配套文档。
 
 `tools/` 也包含独立的软著材料生成工具，`docs/` 保存玩法、模型设计及历次版本资料。模型设计和数据处理说明见[技术剖析](docs/技术剖析.md)和[隐私政策](docs/隐私政策.md)。
+
+> **关于测试脚本的保留说明**
+>
+> `tools/` 下的脚本不参与游戏运行，打包时也不会进入 APK、网页包或离线 HTML，
+> 对游玩没有任何影响。保留它们是为了在修改生理引擎后能快速回归，
+> 避免「改了 A 坏了 B」。只想发布的话可以整目录删除。
+> 按 `.gitattributes`，发布归档（`git archive`）会自动排除这些脚本。
+>
+> 浏览器端测试需要先 `npm install`（仅 `playwright-core`）。
 
 本作为医学教学模拟，建议 16 岁以上玩家使用。病例、数值及处置效果仅供模拟学习，请勿用于真实诊疗。代码采用 [MIT 许可证](LICENSE)。

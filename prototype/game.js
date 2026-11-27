@@ -35,6 +35,13 @@ const IS_WEB = (function () {
       !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   } catch (e) { return false; }
 })();
+/* 调试入口（强制移除患者等）：只有 ?debug=1 才出现，正式包与线上版本默认隐藏 */
+const DEBUG_TOOLS = (function () {
+  try {
+    const q = new URLSearchParams(location.search);
+    return q.get('debug') === '1';
+  } catch (e) { return false; }
+})();
 /* 上级医师是否主动提示：默认关闭，改为"求助制"——只在点「问上级」时给提示，其余时候只做给药点评 */
 let autoHint = false;   /* 无障碍：大字号模式（全局缩放 1.10） */   /* 暂停：所有床位都停止推进 */
 let level = (function(){ try { return localStorage.getItem('life.level') || 'intern'; } catch(e){ return 'intern'; } })();
@@ -2224,7 +2231,8 @@ function bind() {
     {n:'音效设置', tag:SOUND.enabled ? SOUND.volume + '%' : '静音', amt:'调节', run:openSoundSettings},
     {sec:'存档与测试'},
     {n:'重置游戏存档', tag:'清空游戏进度及设置', amt:'', run:confirmSaveReset},
-    {n:'强制移除当前患者（测试用）', tag:'释放当前床位', amt:'', run:confirmRemovePatient},
+    /* 仅调试模式可见：正式包不提供这个入口 */
+    ...(DEBUG_TOOLS ? [{n:'强制移除当前患者（测试用）', tag:'释放当前床位', amt:'', run:confirmRemovePatient}] : []),
     {sec:'设置与工具'},
     {n:'会诊', tag:'分享 / 接手病例', amt:'查看', run: () => openConsult()},
     {n:'费用与医保', tag: realism ? '查看明细' : '现实模式才计费', amt:'查看', run: () => openCostSheet()},
