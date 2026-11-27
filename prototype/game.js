@@ -1325,7 +1325,7 @@ function loop(ts) {
         (st.spo2 < 80 || st.k > 7 || E.bp(st).sys < 70 ? 'vitals' : null);
       if (crit && crit !== b.crit) {
         if (st !== S) {
-          const reason = crit === 'vf' ? '室颤' : crit === 'asystole' ? '心静止' : st.cas.name;
+          const reason = crit === 'vf' ? '室颤' : crit === 'asystole' ? '心静止' : '生命体征';
           toast('⚠ 床位 ' + (beds.indexOf(b) + 1) + ' 危急：' + reason, true);
         }
         if (crit === 'vitals') warnings.add(st);
@@ -1572,7 +1572,7 @@ function switchBed(patient) {
   }
   focusBed(index);
   saveGame();
-  toast(`切换到床位 ${index + 1}：${S.cas.name}`);
+  toast(`已切换到床位 ${index + 1}`);
   return true;
 }
 
@@ -1777,7 +1777,7 @@ function openBeds() {
     const st = b.S;
     const tag = st.discharged ? '已出院' : (st.death ? '已死亡' : `${Math.round(st.t / 60)} min`);
     return {
-      n: `床位 ${i + 1} · ${st.cas.name}`,
+      n: `床位 ${i + 1}`,
       tag: `${b.S === S ? '当前 · ' : ''}${tag}<span data-bed-severity="${i}">${bedSeverity(st)}</span>`,
       amt: b.S === S ? '—' : '切换',
       run: () => switchBed(st),
@@ -2105,7 +2105,7 @@ function buildFeedbackText() {
   lines.push('版本：v' + APP_VERSION + '（' + platformName + '）');
   try { lines.push('设备：' + navigator.userAgent.slice(0, 90)); } catch (e) {}
   if (S) {
-    lines.push('病例：' + (S.cas && S.cas.name || '—') + ' / 难度 ' + (S.diff || caseDiff));
+    lines.push('病例编号：' + (S.caseId || '随机') + ' / 难度 ' + (S.diff || caseDiff));
     const p = S.patient || {};
     lines.push('病人：' + (p.name || '—') + ' ' + (p.sex || '') + ' ' + (p.age || '') + ' 岁');
     lines.push('游戏时间：' + Math.round((S.t || 0) / 60) + ' 分钟' + (S.death ? ' · 已死亡' : S.discharged ? ' · 已出院' : ' · 进行中'));
@@ -2191,7 +2191,7 @@ function openFeedback() {
 }
 
 /* ---------------- 版本 / 更新检查 ---------------- */
-const APP_VERSION = '1.54.5';
+const APP_VERSION = '1.53.1';
 const releaseRoot = document.querySelector('meta[name="xuanhu-release-root"]')?.content;
 const releaseBase = releaseRoot ? new URL(releaseRoot, location.href).href.replace(/\/$/, '') : '';
 const platformName = location.protocol === 'file:' ? '离线 HTML' :
@@ -2529,7 +2529,7 @@ function openConsult() {
       : d.o === 'discharge' ? '出院' : '未结束';
     pv.innerHTML =
       '<div style="font-size:13px;line-height:1.7">' +
-      '<div><b>' + escapeHtml(caseName) + '</b></div>' +
+      '<div><b>会诊病例</b></div>' +
       '<div style="color:#8a8078">病人：' + escapeHtml(p.n || '—') + ' · ' + escapeHtml(p.x) + ' · ' + escapeHtml(p.a) + ' 岁 · ' + escapeHtml(p.w) + ' kg</div>' +
       '<div style="color:#8a8078">结局：' + escapeHtml(outcome) + ' · 用时 ' + escapeHtml(d.t) + ' 分钟 · 评分 ' + escapeHtml(d.sc) + '</div>' +
       '<div style="margin-top:6px;color:#6b625d">处置 ' + acts.length + ' 条：' + escapeHtml(acts.slice(0, 6).join('；') || '无') + (acts.length > 6 ? ' …' : '') + '</div>' +
@@ -2752,8 +2752,12 @@ function prepareCase(st) {
 function openAdmission() {
   if (!isCurrentPatient(S)) return;
   const c = S.cas;
+  const chief = c.chief || c.complaint || '';
   const history = c.admission ? CASEGEN.admissionNarrative(c) : c.complaint;
-  const rows = [['病史', escapeHtml(history).replace(/\n/g, '<br>')]];
+  const rows = [['主诉', escapeHtml(chief).replace(/\n/g, '<br>')]];
+  if (history && history !== chief) {
+    rows.push(['现病史', escapeHtml(history).replace(/\n/g, '<br>')]);
+  }
   const v = S.admissionVitals;
   if (v) {
     rows.push(['接诊首测', caseTime(v.t)],
@@ -2761,10 +2765,56 @@ function openAdmission() {
       ['血压 / 呼吸', `${v.sys}/${v.dia} mmHg · ${v.rr} 次/分`],
       ['SpO₂ / 意识', `${v.spo2 == null ? '无信号' : v.spo2 + '%'} · GCS ${v.gcs}`]);
   } else rows.push(['接诊首测', '旧存档未记录']);
-  rows.push(['本例治疗目标', escapeHtml(c.goals.join('；'))], ['出院心率范围', E.dischargeCheck(S).heartRateTarget],
-    ['体质', escapeHtml(S.traits?.map(x => x.n).join('、') || '无特殊体质')]);
-  if (level !== 'expert') rows.push(['提示', escapeHtml(c.hint)]);
-  openDetail(c.name, S.patient.name + ' · 入院记录', rows, '');
+  /* 诊断、目标、体质、提示都属于"医生该自己想"的信息，入院记录里不再展示 */
+  openDetail('入院记录', S.patient.name + ' · 主诉与首测', rows, '');
+}
+
+/* 开局卡片：只讲患者主诉，几秒后自动淡出，不提供任何诊断线索 */
+let admissionIntro = null;
+function showAdmissionIntro(st) {
+  if (admissionIntro) { admissionIntro.remove(); admissionIntro = null; }
+  if (!st || !st.cas) return;
+  const p = st.patient || {};
+  const chief = st.cas.chief || st.cas.complaint || '';
+  const complaint = st.cas.admission ? CASEGEN.admissionNarrative(st.cas) : st.cas.complaint;
+  const el = document.createElement('div');
+  el.id = 'admissionIntro';
+  el.style.cssText = 'position:fixed;inset:0;z-index:290;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(0,0,0,.30);opacity:0;transition:opacity .35s ease';
+  el.innerHTML =
+    '<div style="width:min(430px,88vw);background:var(--card);color:var(--ink);border-radius:16px;padding:20px 20px 16px;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,.30);border:1px solid var(--line)">' +
+      '<div style="font-size:11px;letter-spacing:2px;color:var(--ink-3);margin-bottom:6px">新患者入院</div>' +
+      '<div style="font-size:19px;font-weight:700;margin-bottom:2px">' + escapeHtml(p.name || '患者') + '</div>' +
+      '<div style="font-size:12.5px;color:var(--ink-3);margin-bottom:12px">' +
+        (p.age ? p.age + ' 岁 · ' : '') + (p.sex || '') + (p.weight ? ' · ' + p.weight + ' kg' : '') +
+      '</div>' +
+      '<div style="font-size:15px;font-weight:600;line-height:1.7;color:var(--ink);margin-bottom:10px">' +
+        escapeHtml(chief) +
+      '</div>' +
+      (complaint && complaint !== chief
+        ? '<div style="font-size:12.5px;line-height:1.75;color:var(--ink-2)">' +
+            escapeHtml(complaint).replace(/\n/g, '<br>') +
+          '</div>'
+        : '') +
+      '<div style="margin-top:14px;font-size:11.5px;color:var(--ink-3)">查体与化验请自行评估 · 点击关闭</div>' +
+    '</div>';
+  document.body.appendChild(el);
+  admissionIntro = el;
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+  let timer = null;
+  const close = () => {
+    if (!admissionIntro) return;
+    if (timer) clearTimeout(timer);
+    const node = admissionIntro;
+    admissionIntro = null;
+    node.style.opacity = '0';
+    setTimeout(() => node.remove(), 380);
+  };
+  el.addEventListener('click', close);
+  /* 任意一次点击也立即关掉，避免遮挡操作 */
+  window.addEventListener('pointerdown', close, { once: true, capture: true });
+  timer = setTimeout(close, 4600);
 }
 
 function startCase(spec, replace) {
@@ -2775,8 +2825,7 @@ function startCase(spec, replace) {
   }
   const st = ensurePresentation(E.create(spec));
   installCase(st, replace);
-  const tr = (st.traits && st.traits.length) ? '（' + st.traits.map(x => x.short || x.n).join('、') + '）' : '';
-  toast(`新病例：${st.cas.name}${tr}`);
+  showAdmissionIntro(st);
 }
 
 function installCase(st, replace) {
@@ -2842,8 +2891,10 @@ function pickCase() {
       run: () => startCase(window.CASEGEN.generate(diffFromLevel()), true) },
     { sec: '固定教学病例' },
   ];
+  let idx = 0;
   for (const c of Object.values(E.CASES)) {
-    rows.push({ n: c.name, tag: `${c.age}岁 ${c.sex}`, amt: '',
+    idx += 1;
+    rows.push({ n: '教学病例 ' + idx, tag: c.age + '岁 ' + c.sex, amt: '',
                 run: () => startCase(c.id, true) });
   }
   openSheet('选择病例', '随机生成 / 固定教学', rows, isCurrentPatient(S) ? S : null);
@@ -2984,42 +3035,19 @@ function renderAll() {
 
 /* 更新公告：每次发版在这里加一条（新的放最前面） */
 const RELEASES = [
-  { v: '1.54.5', notes: [
-    '出院评估合并同一指标的重复提示；合并病种对同一化验值有不同要求时，可在同一行查看',
-    '在脑面板可观察当前抽搐征象，随病情和抗惊厥治疗更新',
-  ] },
-  { v: '1.54.4', notes: [
-    '床旁尿量、病例目标和出院评估均按小时显示（mL/h）',
-    '血管加压素支持持续泵入、调速和停泵；撤除全部循环支持后需稳定观察 15 个模拟分钟',
-    '出院评估统一显示血钾读数和目标范围，合并病例也只提示一次',
-    '底部「报告」集中显示本床的化验、胸片和 12 导联心电图结果，以及待回报检查',
-  ] },
-  { v: '1.54.3', notes: [
-    '出院评估区分循环支持中和撤药后稳定观察，显示血压和剩余观察时间',
-    '床旁胸片开单项旁新增「查看上次报告」，此前报告和结算日志也可展开影像所见',
-    '有待完成的限时观察时，可从「检查 → 结局」启动稳定期留观快进，包括对乙酰氨基酚中毒的肝损观察',
-  ] },
-  { v: '1.54.2', notes: [
-    '修正先锋必、罗氏芬和泰能的商品名归属与搜索结果',
-    '多巴酚丁胺按持续静脉输注运行，给药页可查看速率、调速或停泵',
-    '呼吸机调至 FiO₂ 21% 时，操作回执注明继续机械通气',
-  ] },
-  { v: '1.54.1', notes: [
-    '病例体质与患者年龄、糖尿病分型相互核对，血糖出院评估与病例目标一致',
-    '胰岛素泵入显示输注医嘱，抗感染药详情使用中文指标名称',
-    '分娩完成后记录母体当时的血压、血氧及新生儿交接去向',
-  ] },
-  { v: '1.54.0', notes: [
-    '新接诊病例按院前时间线整理病史，单独保留接诊首测体征',
-    '床旁可做双肺听诊，血常规与动脉血气可对照上次采样结果',
-    '高血压急症的出院评估显示血管收缩驱动和目标，可直接查看心脏面板',
-    '重度子痫前期可先查看产科评估，确认后分娩按模拟时间推进',
+  { v: '1.53.1', notes: [
+    '主诉按病历格式重写（症状 + 持续时间），现病史单独列出',
+    '开局弹窗只给主诉与现病史，病名仍只在结算出现',
   ] },
   { v: '1.53.0', notes: [
-    '动脉血气与肺面板按同一份分流后的动脉血计算氧合，并显示对应的吸氧浓度',
-    '床旁新增物理降温和被动保暖，修复热射病、低体温和体温趋势的判定',
-    '病例说明和出院评估显示实际心率范围',
-    '结算和病历显示本局设置、加扣分明细以及可滚动的操作日志',
+    '病例不再提前揭晓病名：入院只给主诉与首测，病名在结算时出现',
+    '动脉血气与肺面板按分流后的动脉血计算氧合，修正高浓度吸氧时的读数矛盾',
+    '床旁新增物理降温与被动保暖，区分感染、热射病、甲状腺危象与抽搐产热',
+    '出院评估按监护显示的整数判定心率，并显示该病例的实际目标范围',
+    '结算与病历共用一页：指导等级、难度、现实模式、加扣分明细与可滚动日志',
+    '床旁双肺听诊；血常规与血气可对照上次结果；报告页集中查看化验与影像',
+    '分娩按模拟时间推进，记录母体体征与新生儿交接',
+    '胰岛素按总量与时长输注；多巴酚丁胺、异丙肾上腺素、血管加压素支持持续泵入与调速',
   ] },
   { v: '1.52.0', notes: [
     '床旁心电图按真实心率走纸，心搏音与 R 峰同步；大厅只播高优先级报警',
@@ -3158,7 +3186,7 @@ function showLobby() {
   list.innerHTML = beds.map(({ S: patient }, i) => `
     <button type="button" class="bed" data-bed="${i}" aria-current="${patient === S}">
       <span class="no">${i + 1}</span>
-      <span class="nm">${escapeHtml(patient.patient.name)}<span class="meta">${escapeHtml(patient.cas.name)} · ${Math.floor(patient.t / 60)} 分钟<span data-bed-severity="${i}">${bedSeverity(patient)}</span></span></span>
+      <span class="nm">${escapeHtml(patient.patient.name)}<span class="meta">${Math.floor(patient.t / 60)} 分钟<span data-bed-severity="${i}">${bedSeverity(patient)}</span></span></span>
       <span class="go">继续 →</span>
     </button>`).join('') + `
     <button type="button" class="bed empty" data-new="${full ? 0 : 1}" ${full ? 'disabled' : ''}>
@@ -3266,7 +3294,7 @@ try {
 } catch (e) {}
 requestAnimationFrame(loop);
 window.__showLobby = showLobby; window.__hideLobby = hideLobby; window.__checkBudget = checkBudget; window.openChart = openChart; window.openStats = openStats;
-window.__LIFE_GAME = { get S() { return S; }, get beds() { return beds; }, get activeIdx() { return activeIdx; }, E };
+window.__LIFE_GAME = { get S() { return S; }, get beds() { return beds; }, get activeIdx() { return activeIdx; }, E, startCase, openAdmission, openBeds, switchBed, showAdmissionIntro };
 })();
 
 
