@@ -11,6 +11,7 @@ from site_assets import DEPLOY, ROOT, SINGLE, latest_apk, version, web_files
 
 
 def sync_web(check):
+    version()
     web = ROOT / "web"
     differences = []
     for source, name in web_files():
@@ -26,9 +27,9 @@ def sync_web(check):
 
 
 def build():
+    release = version()
     single = build_singlefile()
     apk = latest_apk()
-    release = version()
     download = build_download_page(release, apk)
     privacy = build_privacy()
     (DEPLOY / "web").mkdir(parents=True, exist_ok=True)
