@@ -59,6 +59,7 @@ function sanitizeEntry(e) {
     encounters: n(e.encounters, 0),
     cured: n(e.cured, 0),
     died: n(e.died, 0),
+    failed: n(e.failed, 0),
     unknown: n(e.unknown, 0),
     severity: e.severity || '',
     evidence: arr(e.evidence).map(String),
@@ -114,10 +115,15 @@ function fmtDate(iso) {
   } catch (e) { return String(iso); }
 }
 function outcomeLabel(o) {
-  return o === 'cured' ? '治好' : o === 'died' ? '死亡' : '未结';
+  if (o === 'cured') return '治好';
+  if (o === 'died') return '死亡';
+  if (o === 'failed') return '出院失败';
+  return '未结';
 }
 function outcomeColor(o) {
-  return o === 'cured' ? '#2f9e63' : o === 'died' ? '#c0392b' : '#8a7a7a';
+  if (o === 'cured') return '#2f9e63';
+  if (o === 'died' || o === 'failed') return '#c0392b';
+  return '#8a7a7a';
 }
 const SEVERITY_LABEL = { critical: '危重', severe: '重症', moderate: '中度', mild: '轻度' };
 function logText(l) {
@@ -181,7 +187,8 @@ function fromCase(S, dx) {
   if (!S) return null;
   const d = dx || (root.DIAGNOSIS && typeof root.DIAGNOSIS.classify === 'function'
     ? root.DIAGNOSIS.classify(S) : null);
-  const outcome = S.discharged ? 'cured' : (S.death ? 'died' : 'unknown');
+  const outcome = S.discharged ? 'cured' : S.death ? 'died'
+    : S.dischargeOutcome?.status === 'failed' ? 'failed' : 'unknown';
   const drugs = [];
   /* 只保留玩家真正给过的药：S.given 里开局 preload 注入的院前用药没有对应日志，
      而玩家每次给药都会留下「给予 <药名> …」的日志。 */
@@ -261,7 +268,7 @@ function record(entry) {
     e = sanitizeEntry({
       name: primary, tags: entry.tags || [],
       firstSeen: now, lastSeen: now,
-      encounters: 0, cured: 0, died: 0, unknown: 0,
+      encounters: 0, cured: 0, died: 0, failed: 0, unknown: 0,
       severity: entry.severity || '',
       evidence: entry.evidence || [],
       evidenceHistory: [], therapies: [], mistreatments: [], note: '',
@@ -274,6 +281,7 @@ function record(entry) {
   const outcome = entry.outcome || (therapy && therapy.outcome) || 'unknown';
   if (outcome === 'cured') e.cured += 1;
   else if (outcome === 'died') e.died += 1;
+  else if (outcome === 'failed') e.failed += 1;
   else e.unknown += 1;
 
   e.lastSeen = now;
@@ -357,9 +365,10 @@ function stats() {
     acc.encounters += e.encounters || 0;
     acc.cured += e.cured || 0;
     acc.died += e.died || 0;
+    acc.failed += e.failed || 0;
     acc.unknown += e.unknown || 0;
     return acc;
-  }, { diagnoses: 0, encounters: 0, cured: 0, died: 0, unknown: 0 });
+  }, { diagnoses: 0, encounters: 0, cured: 0, died: 0, failed: 0, unknown: 0 });
 }
 
 /* ---------------- 渲染 ---------------- */
@@ -399,6 +408,7 @@ function renderTherapy(t, idx) {
 
 function renderEntry(e) {
   const counts = `遇到 ${e.encounters} 次 · 治好 ${e.cured} · 死亡 ${e.died}`
+    + (e.failed ? ` · 出院失败 ${e.failed}` : '')
     + (e.unknown ? ` · 未结 ${e.unknown}` : '');
   const sev = e.severity ? `<span style="font-size:10px;color:#9a9a9a;margin-left:6px">${esc(SEVERITY_LABEL[e.severity] || e.severity)}</span>` : '';
 
@@ -450,7 +460,7 @@ function render() {
       这是你自己的记录，系统不会替你补全。
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11.5px;color:#9a9a9a">
-      <span style="flex:1">收录 ${st.diagnoses} 种诊断 · 共 ${st.encounters} 局 · 治好 ${st.cured} · 死亡 ${st.died}${st.unknown ? ' · 未结 ' + st.unknown : ''}</span>
+      <span style="flex:1">收录 ${st.diagnoses} 种诊断 · 共 ${st.encounters} 局 · 治好 ${st.cured} · 死亡 ${st.died}${st.failed ? ' · 出院失败 ' + st.failed : ''}${st.unknown ? ' · 未结 ' + st.unknown : ''}</span>
       <button class="pill" style="cursor:pointer;border:0"
         onclick="if(window.HANDBOOK)window.HANDBOOK.exportFile()">导出 JSON</button>
       <label class="pill" style="cursor:pointer;margin:0">
