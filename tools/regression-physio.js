@@ -98,6 +98,79 @@ function check(name, ok, detail) { out.push({ name, ok, detail }); }
     '骤停、死亡、费用、带教及旧记录');
 }
 
+{
+  const makeBed = () => E.create({ id: 'signed-discharge-test', init: { ...G.BASE } });
+  const standard = makeBed();
+  E.endCase(standard, 'discharge', '达到出院标准');
+  const normal = makeBed();
+  const normalOutcome = E.signDischarge(normal);
+  const normalScore = E.scoreBreakdown(normal);
+  check('达标签字沿用普通出院和计分', normalOutcome.status === 'normal' && normalOutcome.reasons.length === 0 &&
+    normal.discharged && !normal.running && !normal.death && E.signDischarge(standard) === null &&
+    normalScore.score === 100 && normalScore.score === E.finalScore(standard) &&
+    normalScore.items.some(item => item.label === '出院用时奖励' && item.delta === 25), '符合全部原有条件');
+
+  const observation = makeBed();
+  Object.assign(observation, { t: 60, hadOxygenSupport: true, roomAirStableSince: 0 });
+  const assessment = E.dischargeCheck(observation);
+  const early = E.signDischarge(observation);
+  const earlyScore = E.scoreBreakdown(observation);
+  check('留观未满签字后扣分出院', !assessment.ok && early.status === 'penalized' &&
+    early.reasons.join() === assessment.reasons.join() && early.majorReasons.length === 0 &&
+    observation.discharged && !observation.running && !observation.death && earlyScore.score === 70 &&
+    earlyScore.items.length === 1 && earlyScore.items[0].label === '出院条件未达标' && earlyScore.items[0].delta === -30,
+    '撤氧后室内空气观察未满五分钟，无速度奖励');
+
+  const critical = makeBed();
+  Object.assign(critical, { k: 7.2, temp: 38.1, t: 120 });
+  const before = critical.log.length;
+  const failure = E.signDischarge(critical);
+  E.tick(critical, 60);
+  E.endCase(critical, 'death', '死亡结局不得覆盖已签字的失败结局');
+  const criticalScore = E.scoreBreakdown(critical);
+  check('重大问题签字后独立失败，重复签字仅结算一次', failure.status === 'failed' && failure.t === 120 &&
+    failure.majorReasons.length === 1 && failure.majorReasons[0].startsWith('血钾') && failure.reasons.length === 2 &&
+    E.signDischarge(critical) === failure && critical.log.length === before + 1 && critical.t === 120 &&
+    !critical.discharged && !critical.running && !critical.death && criticalScore.score === 0 &&
+    criticalScore.items.length === 1 && criticalScore.items[0].label === '出院存在重大问题', '严重高钾合并轻度发热');
+
+  const support = makeBed();
+  E.give(support, 'norepi', 8, '泵入');
+  const ongoing = E.signDischarge(support);
+  const stemi = makeBed();
+  stemi.cas = G.generate(1, 123, ['stemi']);
+  stemi.stemi = 0.4;
+  const untreated = E.signDischarge(stemi);
+  check('主动循环支持与未完成关键急症处置均为重大问题', ongoing.status === 'failed' &&
+    ongoing.majorReasons.some(reason => reason.includes('仍在持续静脉泵入')) && untreated.status === 'failed' &&
+    untreated.majorReasons.includes('冠脉未再通（ST 仍抬高）'), '使用同一套出院评估理由');
+
+  const sufficientOxygen = makeBed(), dependentOxygen = makeBed();
+  for (const bed of [sufficientOxygen, dependentOxygen]) E.ACTIONS.oxygen.apply(bed);
+  dependentOxygen.shunt = 0.3;
+  const dependent = E.signDischarge(dependentOxygen);
+  check('给氧时读数正常仍识别室内空气低氧', dependentOxygen.spo2 >= 94 && E.roomAirSaturation(dependentOxygen) < 90 &&
+    dependent.status === 'failed' && dependent.majorReasons.some(reason => reason.includes('仍在吸氧')) &&
+    E.signDischarge(sufficientOxygen).status === 'penalized', '两床均在给氧，只有一床模拟撤氧后仍缺氧');
+
+  const specialty = (id, patch) => Object.assign(makeBed(), { cas: G.generate(1, 123, [id]) }, patch);
+  const co = specialty('co', { coHb: 0.55 });
+  const ptx = E.signDischarge(specialty('ptx', { tensionPTX: 0.60 }));
+  const tamponade = E.signDischarge(specialty('tamponade', { tamponade: 0.50 }));
+  const coOutcome = E.signDischarge(co);
+  check('专属病例的重大问题可独立触发失败', co.spo2 >= 94 && coOutcome.status === 'failed' &&
+    coOutcome.majorReasons.includes('碳氧血红蛋白 55%') && ptx.status === 'failed' &&
+    ptx.majorReasons.some(reason => reason.includes('胸腔内压')) && tamponade.status === 'failed' &&
+    tamponade.majorReasons.some(reason => reason.includes('心包内压')) &&
+    E.signDischarge(specialty('co', { coHb: 0.13 })).status === 'penalized' &&
+    E.signDischarge(specialty('tamponade', { tamponade: 0.20 })).status === 'penalized', '同一病例也能区分较轻的残余异常');
+
+  const deceased = makeBed();
+  E.endCase(deceased, 'death', '测试死亡');
+  check('已死亡病例保留原结局', E.signDischarge(deceased) === null && deceased.dischargeOutcome === null &&
+    deceased.death.reason === '测试死亡' && E.finalScore(deceased) === 55, '签字与死亡结局独立');
+}
+
 /* 1. 首帧自洽：create 后与第一个 tick 的血压差 < 3 mmHg */
 for (const id of ['hyperkalemia', 'dka', 'bleed', 'sepsis', 'opioid']) {
   const S = E.create(id);
@@ -558,6 +631,87 @@ for (const id of ['hyperkalemia', 'dka', 'bleed', 'sepsis', 'opioid']) {
     return reasons.filter(r => r.startsWith('血钾')).length === 1 &&
       reasons.filter(r => r.startsWith('血糖')).length === (glu >= 11 ? 1 : 0);
   })), '高钾合并 DKA');
+}
+{
+  const make = (identity) => E.create(G.generate(2, 101, ['aki']), identity);
+  const advance = (bed, seconds, step = 20) => {
+    for (let elapsed = 0; elapsed < seconds; elapsed += step) {
+      const dt = Math.min(step, seconds - elapsed);
+      E.tick(bed, dt);
+      G.step(bed, dt, E);
+    }
+  };
+  const serialize = ({ cas, ...state }) => JSON.parse(JSON.stringify(state));
+  const restore = saved => {
+    const bed = Object.assign(make(), saved);
+    E.restoreDischargeObservation(bed, saved);
+    return bed;
+  };
+  const furo = make({ weight: 56 });
+  Object.assign(furo, { k: 4.9, hco3: 16, cr: 280, renalFactor: 0.062, diuresis: 7.2 });
+  advance(furo, 9 * 60);
+  const inducedUrine = furo.uo * 60;
+  // 复放反馈中的床旁读数，56 kg 病例的总尿量也已越过 0.5 mL/kg/h。
+  furo.uo = 30.04 / 60;
+  const furoCheck = E.dischargeCheck(furo);
+  check('短暂利尿达到 30.04 mL/h 仍会拦截 AKI 签字', inducedUrine >= 28 && Math.round(furo.gfr) === 8 &&
+    furo.cr < 400 && furo.cr > 285 && furoCheck.majorReasons.some(reason => /30\.04 mL\/h.*利尿.*自身尿量/.test(reason)) &&
+    furoCheck.reasons.some(reason => reason.includes('肌酐回升')) && E.signDischarge(furo).status === 'failed',
+    '模拟 GFR 约 8，肌酐低于 400 但仍在回升，总尿量达标时还需评估自身尿量');
+
+  const bed = make();
+  E.give(bed, 'calcium', 10);
+  E.give(bed, 'insulin', 10);
+  E.give(bed, 'dextrose50', 25);
+  advance(bed, 310);
+  E.ACTIONS.dialysis.apply(bed);
+  advance(bed, 180 * 60 - 20);
+  const whileDialyzing = E.dischargeCheck(bed);
+  const endAt = bed.dialysisUntil;
+  const noDialysis = restore({ ...serialize(bed), dialysisUntil: -1 });
+  E.tick(noDialysis, 30);
+  advance(bed, 30, 30);
+  const firstAfterDialysis = E.dischargeCheck(bed);
+  check('透析中和快进跨过透析结束时需重新评估', whileDialyzing.majorReasons.some(reason => reason.includes('透析仍在进行')) &&
+    whileDialyzing.observationEndsAt === endAt && bed.cr < noDialysis.cr && !firstAfterDialysis.ok &&
+    firstAfterDialysis.observationEndsAt === bed.t + 30 * 60,
+    '跨越透析结束的 30 秒中按其中 20 秒清除肌酐，留观从首个透析间期样本开始');
+
+  advance(bed, 10 * 60);
+  const progress = E.dischargeCheck(bed);
+  const saved = serialize(bed);
+  const legacy = { ...saved };
+  delete legacy.akiObservation;
+  const existing = E.dischargeCheck(restore(saved));
+  const legacyBed = restore(legacy);
+  const legacyCheck = E.dischargeCheck(legacyBed);
+  check('读档保留已验证的 AKI 留观，旧档从当前建立基线', !progress.ok &&
+    progress.reasons.some(reason => reason.includes('还需 20 分钟')) &&
+    existing.observationEndsAt === progress.observationEndsAt && legacyCheck.reasons.some(reason => reason.includes('还需 30 分钟')) &&
+    legacyCheck.observationEndsAt === legacy.t + 30 * 60,
+    '旧档缺少自主尿量和肌酐连续趋势，重读后重新观察');
+
+  const dip = restore(serialize(bed));
+  const beforeDip = dip.akiObservation.urineStableSince;
+  const beforeDipState = { renalFactor: dip.renalFactor, diuresis: dip.diuresis };
+  Object.assign(dip, { renalFactor: 0.08, diuresis: 6.4 });
+  advance(dip, 20);
+  const afterDip = dip.akiObservation.urineStableSince;
+  Object.assign(dip, beforeDipState);
+  advance(dip, 20);
+  check('自身尿量中断会重新开始 AKI 留观', beforeDip != null && afterDip == null &&
+    dip.akiObservation.urineStableSince === dip.t && E.dischargeCheck(dip).observationEndsAt === dip.t + 30 * 60,
+    '一拍自身尿量跌落时，即使总尿量受利尿影响，仍需重新累计连续留观');
+
+  advance(bed, 20 * 60);
+  const rebound = E.dischargeCheck({ ...bed, cr: bed.cr + 30 });
+  check('AKI 停透期间肌酐反弹会单独阻止出院', !rebound.ok && rebound.reasons.length === 1 &&
+    rebound.reasons[0].includes('肌酐回升'),
+    '已完成留观，尿量达标，肌酐反弹且仍低于病例绝对上限');
+  advance(legacyBed, 30 * 60);
+  check('稳定的 AKI 和由旧档恢复的患者均可在留观后正常签字', bed.cr < 400 && bed.renalFactor > 0.5 &&
+    E.signDischarge(bed).status === 'normal' && E.signDischarge(legacyBed).status === 'normal',
+    '常规处置后自身尿量达标，离透析稳定满 30 个模拟分钟');
 }
 {
   const assess = (ids, patch) => E.dischargeCheck(Object.assign(E.create(G.generate(4, 13, ids)), patch)).reasons;
