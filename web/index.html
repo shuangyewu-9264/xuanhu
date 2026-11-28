@@ -390,6 +390,16 @@ button { color: inherit; }
 .sheet .list { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 6px 10px 10px; }
 .sheet input, .sheet canvas, .sheet img, .sheet video { max-width: 100%; }
 .sheet input { display: block; width: 100%; }
+#drugSearch { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--subtle); color: var(--ink); font: inherit; }
+#drugTabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+#drugTabs button, #drugBack { flex: none; min-height: 36px; padding: 6px 12px; color: var(--ink-2); cursor: pointer; }
+#drugTabs [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+#drugList details { border-bottom: 1px solid var(--line); }
+#drugList summary { min-height: 44px; padding: 12px 8px; color: var(--ink); font-weight: 650; cursor: pointer; }
+#drugList summary::marker { color: var(--ink-2); }
+#drugList summary small { float: right; color: var(--ink-2); font-weight: 400; }
+#drugList .nm small { color: var(--ink-2); font-size: 11px; }
+#drugBack { margin-bottom: 8px; }
 .sound-settings { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 16px; padding: 10px; }
 .sound-settings label { font-weight: 650; }
 .sound-settings output { font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; }
@@ -414,6 +424,10 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
 .drow .tag { padding: 2px 6px; border-radius: 5px; color: var(--ink-2); background: var(--subtle); font-size: 11px; }
 .drow .amt { color: var(--ink-2); font-family: var(--mono); font-size: 11px; text-align: right; }
 .drow .tag:empty, .drow .amt:empty { display: none; }
+.drow[data-rule] { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; }
+.drow[data-rule] .tag { grid-row: 2; grid-column: 1 / -1; background: none; padding: 0; line-height: 1.5; }
+.drow[data-rule] .amt { grid-column: 2; grid-row: 1; }
+.drow[data-rule][aria-pressed="true"] .amt { color: var(--accent); font-weight: 700; }
 .sec { padding: 12px 9px 3px; color: var(--ink-2); font-size: 12px; font-weight: 680; }
 
 .detail {
@@ -446,6 +460,21 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
 .detail .warn { padding: 9px 11px; border-radius: 8px; background: var(--danger-bg); color: var(--red); white-space: pre-wrap; }
 .detail .warn.eligible { background: var(--subtle); color: var(--green); }
 .detail .x { position: absolute; top: 6px; right: 6px; }
+#detail[data-view="operation-log"] .card, #detail[data-view="infusions"] .card { width: min(560px, 100%); }
+#detail[data-view="operation-log"] #dKv {
+  max-height: 58vh; overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none;
+  grid-template-columns: max-content minmax(0, 1fr); gap: 0 12px; line-height: 1.5;
+}
+#detail[data-view="operation-log"] #dKv > * { padding: 7px 0; border-bottom: 1px solid var(--line); }
+#detail[data-view="operation-log"] dt { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+#detail[data-view="infusions"] #dKv { display: block; }
+.infusion-section + .infusion-section { margin-top: 16px; }
+.infusion-section > dt { font-weight: 700; }
+.infusion-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.infusion-row-heading, .infusion-amounts { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
+.infusion-status, .infusion-meta, .infusion-amounts { color: var(--ink-2); font-size: 12px; line-height: 1.65; }
+.infusion-progress { display: block; width: 100%; height: 8px; margin: 8px 0 4px; accent-color: var(--accent); }
+.infusion-manage { min-height: 40px; margin-top: 6px; cursor: pointer; }
 
 #detail.case-review .card {
   width: min(760px, 100%);
@@ -772,7 +801,7 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
   font-size: 12px;
   cursor: pointer;
 }
-#lobby [data-mode][aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+#lobby [data-mode][aria-pressed="true"], #lobby .active-rules { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .lobby-release {
   padding: 7px 10px;
   border: 1px solid var(--line);
@@ -900,7 +929,7 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
       <h2 class="cap">值班设置</h2>
       <div class="lobby-modes">
         <button type="button" data-mode="night" aria-pressed="false">夜间模式</button>
-        <button type="button" data-mode="realism" aria-pressed="false">现实模式</button>
+        <button type="button" data-mode="realism" aria-haspopup="dialog">现实模式</button>
         <button type="button" data-act="sound" aria-haspopup="dialog">音效设置</button>
       </div>
       <h2 class="cap">随身工具</h2>
@@ -949,6 +978,8 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
 <script src="substances.js"></script>
 <script src="traits.js"></script>
 <script src="generator.js"></script>
+<script src="intake.js"></script>
+<script src="exams.js"></script>
 <script src="engine.js"></script>
 <script src="diagnosis.js"></script>
 <script src="handbook.js"></script>
