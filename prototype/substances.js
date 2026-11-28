@@ -3,7 +3,7 @@
  * 物质清单按临床常用药自行整理，覆盖急救、电解质、内分泌、抗感染与中毒解救。
  *
  * 数据结构：每项 = { id, n 名称, c 分类, r 给药途径, d 默认剂量, u 单位,
- *                   on 起效(min), du 持续(min), $ 费用, e 效应, note 说明 }
+ *                   on 起效(min), du 持续(min), cost 模拟费用, e 效应, note 说明 }
  * e 里的数值 = 「给完这一剂后，整个疗程累计产生的总变化量」，
  * 引擎按梯形权重把它摊到 du 分钟内，所以不会瞬间跳变。
  * ========================================================================== */
@@ -68,7 +68,15 @@ const CLS = {
   '抗真菌':     { r:'静滴', on:30, du:360, e:{ infection:-0.45 } },
 };
 
-/* ---------- 药物清单（id, 名称, 类别, 剂量, 单位, 费用, 覆盖说明/效应） ---------- */
+/* ---------- 游戏费用基准（人民币元） ----------
+ * 药品表的金额用于游戏内结算。常规给药按默认剂量计一次，持续泵入按默认泵速计一小时。
+ * 按体重给药的金额以 70 kg 为基准。旧金额原为每次操作的固定费用，沿用其数值作为基准。
+ * 普通口服药、注射药和特殊治疗沿用游戏既有费用层级。以下金额均为游戏设定。
+ * 内源性物质和非治疗性精神活性物质统一计模拟物品消耗费。
+ */
+const SIMULATION_MATERIAL_COST = 8;
+
+/* ---------- 药物清单（id, 名称, 类别, 剂量, 单位, 基准费用, 覆盖说明/效应） ---------- */
 const DRUGS = [
   /* —— 心血管 —— */
   ['norepi',   '去甲肾上腺素', '血管活性', 8,  'μg/min', 60, null],
@@ -83,6 +91,7 @@ const DRUGS = [
   ['digoxin',  '地高辛',       '强心',     0.25,'mg',     22, { e:{sv:+8, hr:-6} }],
   ['nifedipine','硝苯地平',    '钙拮抗剂', 10, 'mg',     16, null],
   ['amlodipine','氨氯地平',    '钙拮抗剂', 5,  'mg',     18, null],
+  ['nicardipine','尼卡地平',   '钙拮抗剂', 5,  'mg/h',   42, { e:{svr:-2}, note:'高血压急症。连续监测血压和心率，每 15–30 分钟按反应调高 2.5 mg/h，最高 15 mg/h。注意低血压和反射性心动过速，重度主动脉瓣狭窄禁用。' }],
   ['propranolol','普萘洛尔',   'β阻滞剂',  20, 'mg',     12, null],
   ['metoprolol','美托洛尔',    'β阻滞剂',  25, 'mg',     14, null],
   ['atenolol', '阿替洛尔',     'β阻滞剂',  25, 'mg',     12, null],
@@ -169,7 +178,7 @@ const DRUGS = [
   ['codeine',  '可待因',       '阿片',     30, 'mg',     8,  { r:'口服' }],
   ['oxycodone','羟考酮',       '阿片',     5,  'mg',     14, { r:'口服' }],
   ['hydrocodone','氢可酮',     '阿片',     5,  'mg',     12, { r:'口服' }],
-  ['endorphin','内啡肽',       '阿片',     1,  'U',      0,  { r:'静推', e:{rr:-2, gcs:-1}, note:'内源性镇痛物质' }],
+  ['endorphin','内啡肽',       '阿片',     1,  'U',      SIMULATION_MATERIAL_COST, { r:'静推', e:{rr:-2, gcs:-1}, note:'内源性镇痛物质' }],
   ['diazepam', '地西泮',       '镇静',     5,  'mg',     9,  { e:{ gcs:-3, rr:-2, hr:-4 } }],
   ['lorazepam', '劳拉西泮',    '镇静',     2,  'mg',     12, { e:{ gcs:-3, rr:-2, hr:-4 } }],
   ['phenobarbital','苯巴比妥', '镇静',     100,'mg',     16, { e:{gcs:-5, rr:-4, hr:-8} }],
@@ -184,17 +193,17 @@ const DRUGS = [
   ['dextromethorphan','右美沙芬','抗组胺', 15, 'mg',     8,  { note:'镇咳；过量致 5-HT 毒性' }],
   ['caffeine', '咖啡因',       '兴奋剂',   200,'mg',     4,  null],
   ['ephedrine', '麻黄碱',      '兴奋剂',   25, 'mg',     8,  null],
-  ['amphetamine','安非他命',   '兴奋剂',   10, 'mg',     0,  { note:'管制物质' }],
-  ['methamphetamine','甲基苯丙胺','兴奋剂',10,'mg',      0,  { note:'管制物质，心血管毒性大' }],
-  ['cocaine',  '可卡因',       '兴奋剂',   50, 'mg',     0,  { e:{hr:+26, svr:+1.6, temp:+0.6}, note:'冠脉痉挛、心律失常' }],
-  ['nicotine', '尼古丁',       '兴奋剂',   2,  'mg',     0,  null],
-  ['psilocybin','裸盖菇素',    '致幻剂',   10, 'mg',     0,  null],
-  ['psilocin', '脱磷酸裸盖菇素','致幻剂',  10, 'mg',     0,  null],
-  ['mescaline','麦司卡林',     '致幻剂',   200,'mg',     0,  null],
-  ['dmt',      '二甲基色胺',   '致幻剂',   20, 'mg',     0,  { on:2, du:20 }],
-  ['thc',      '四氢大麻酚',   '致幻剂',   10, 'mg',     0,  { e:{gcs:-2, hr:+10} }],
-  ['cbd',      '大麻二酚',     '致幻剂',   25, 'mg',     0,  { e:{gcs:-1} }],
-  ['heroin',   '海洛因',       '阿片',     10, 'mg',     0,  { e:{rr:-6, gcs:-4}, note:'呼吸抑制极强' }],
+  ['amphetamine','安非他命',   '兴奋剂',   10, 'mg',     SIMULATION_MATERIAL_COST, { note:'管制物质' }],
+  ['methamphetamine','甲基苯丙胺','兴奋剂',10,'mg',      SIMULATION_MATERIAL_COST, { note:'管制物质，心血管毒性大' }],
+  ['cocaine',  '可卡因',       '兴奋剂',   50, 'mg',     SIMULATION_MATERIAL_COST, { e:{hr:+26, svr:+1.6, temp:+0.6}, note:'冠脉痉挛、心律失常' }],
+  ['nicotine', '尼古丁',       '兴奋剂',   2,  'mg',     SIMULATION_MATERIAL_COST, null],
+  ['psilocybin','裸盖菇素',    '致幻剂',   10, 'mg',     SIMULATION_MATERIAL_COST, null],
+  ['psilocin', '脱磷酸裸盖菇素','致幻剂',  10, 'mg',     SIMULATION_MATERIAL_COST, null],
+  ['mescaline','麦司卡林',     '致幻剂',   200,'mg',     SIMULATION_MATERIAL_COST, null],
+  ['dmt',      '二甲基色胺',   '致幻剂',   20, 'mg',     SIMULATION_MATERIAL_COST, { on:2, du:20 }],
+  ['thc',      '四氢大麻酚',   '致幻剂',   10, 'mg',     SIMULATION_MATERIAL_COST, { e:{gcs:-2, hr:+10} }],
+  ['cbd',      '大麻二酚',     '致幻剂',   25, 'mg',     SIMULATION_MATERIAL_COST, { e:{gcs:-1} }],
+  ['heroin',   '海洛因',       '阿片',     10, 'mg',     SIMULATION_MATERIAL_COST, { e:{rr:-6, gcs:-4}, note:'呼吸抑制极强' }],
 ];
 
 /* ---------- 补充：覆盖缺口（酸碱、升压选择、镇静、解毒、抗甲状腺…） ---------- */
@@ -222,6 +231,7 @@ const EXTRA = [
   ['propofol',         '丙泊酚',       '镇静',     100,'mg',     46, { on:1, du:30, e:{gcs:-6, rr:-5, svr:-1.5}, note:'快诱导；低血压' }],
   ['haloperidol',      '氟哌啶醇',     '抗精神病', 5,  'mg',     22, { e:{gcs:-2}, note:'谵妄首选，注意 QT' }],
   ['phenytoin',        '苯妥英钠',     '抗癫痫',   500,'mg',     32, { note:'癫痫持续状态二线' }],
+  ['levetiracetam',    '左乙拉西坦',   '抗癫痫',   2000,'mg',    48, { on:2, du:120, e:{seizure:-0.65}, note:'成人惊厥性癫痫持续状态二线，苯二氮卓治疗后仍发作时使用。负荷量 1000–3000 mg，稀释后静滴至少 15 分钟，留意嗜睡和意识变化。' }],
   ['valproate',        '丙戊酸钠',     '抗癫痫',   800,'mg',     38, { note:'广谱抗癫痫' }],
   ['ondansetron',      '昂丹司琼',     '止吐',     4,  'mg',     24, { note:'5-HT3 拮抗，止吐' }],
   ['neostigmine',      '新斯的明',     '解毒与拮抗',    2.5,'mg',     26, { r:'静推', on:3, du:60, e:{rr:+3}, note:'拮抗非去极化肌松' }],
@@ -298,10 +308,11 @@ const VIRUS_CELL = [
   ['v_noro',      '诺如病毒',   { infection:+0.40, vol:-0.4 },  { cls:'病毒', route:'接种', dose:1, unit:'剂', on:45, du:720,  note:'呕吐腹泻，脱水' }],
   ['v_rota',      '轮状病毒',   { infection:+0.40, vol:-0.5 },  { cls:'病毒', route:'接种', dose:1, unit:'剂', on:45, du:720,  note:'婴幼儿腹泻' }],
   ['v_ecoli',     '大肠杆菌',   { infection:+0.50, temp:+0.6 }, { cls:'细菌', route:'接种', dose:1, unit:'剂', on:60, du:1440, note:'可致脓毒症' }],
-  ['c_rbc',       '红细胞',     { hb:+18, vol:+0.25 },          { cls:'血液成分', route:'输注', dose:1, unit:'U', on:10, du:120, note:'提升携氧' }],
-  ['c_wbc',       '白细胞',     { infection:-0.15 },            { cls:'血液成分', route:'输注', dose:1, unit:'U', on:20, du:240, note:'粒细胞输注' }],
-  ['c_plt',       '血小板',     { coag:+0.35 },                 { cls:'血液成分', route:'输注', dose:1, unit:'U', on:10, du:240, note:'纠正血小板减少' }],
-  ['c_plasma',    '血浆',       { coag:+0.30, vol:+0.25 },      { cls:'血液成分', route:'输注', dose:1, unit:'U', on:15, du:240, note:'补充凝血因子' }],
+  /* 红细胞与血浆按现有 2 U 血制品费用折算。白细胞与血小板使用较高的游戏输注费用。 */
+  ['c_rbc',       '红细胞',     { hb:+18, vol:+0.25 },          { cls:'血液成分', route:'输注', dose:1, unit:'U', on:10, du:120, cost:260, note:'提升携氧' }],
+  ['c_wbc',       '白细胞',     { infection:-0.15 },            { cls:'血液成分', route:'输注', dose:1, unit:'U', on:20, du:240, cost:680, note:'粒细胞输注' }],
+  ['c_plt',       '血小板',     { coag:+0.35 },                 { cls:'血液成分', route:'输注', dose:1, unit:'U', on:10, du:240, cost:950, note:'纠正血小板减少' }],
+  ['c_plasma',    '血浆',       { coag:+0.30, vol:+0.25 },      { cls:'血液成分', route:'输注', dose:1, unit:'U', on:15, du:240, cost:190, note:'补充凝血因子' }],
 ];
 
 
@@ -361,6 +372,7 @@ const ROUTE_MAP = {
   vasopressin: [{ r:'持续静脉泵入', pumpHalfLife:5, pumpStep:0.005 }],
   dobutamine: [{ r:'持续静脉泵入', on:2, pumpHalfLife:2 }],
   isoproterenol: [{ r:'持续静脉泵入', on:0, pumpHalfLife:3 }],
+  nicardipine: [{ r:'持续静脉泵入', on:0, pumpHalfLife:30, pumpStep:2.5, maxDose:15 }],
   epi:         [{ r:'泵入', d:1, on:1, du:8 }, { r:'静推', d:1, on:1, du:5 }],
   levothyroxine: [{ r:'口服', d:100, on:240, du:1440 }, { r:'静推', d:100, on:60, du:1440 }],
   kcl:        [{ r:'静滴', d:20, on:5,  du:60  }, { r:'口服', d:20, on:45, du:120 }],
@@ -383,37 +395,38 @@ const ROUTE_MAP = {
   furosemide2: null,
   salbutamol: [{ r:'吸入', d:2.5,on:3,  du:60  }, { r:'静滴', d:5,  on:5,  du:60 }],
   insulin:    [{ r:'静推', d:10, on:15, du:240 }, { r:'泵入', d:2,  on:30, du:720, infusionMinutes:60 }],
+  levetiracetam: [{ r:'静滴', infusionMinutes:15, maxDose:3000 }],
   heparin:    [{ r:'静推', d:5000,on:5, du:180 }, { r:'皮下', d:5000,on:30,du:360 }],
   naloxone:   [{ r:'静推', d:0.4,on:1,  du:45  }, { r:'肌注', d:0.8,on:5,  du:90 }],
 };
 
-/* ---------- 食物 / 饮料 ---------- */
+/* ---------- 食物 / 饮料（末列为一份的模拟饮食费，单位为元） ---------- */
 const FOODS = [
-  ['water', '水', { freeWater:+0.30, vol:+0.05 }],
-  ['cola',       '可乐',       { vol:+0.33, glu:+4.5, k:+0.03 }],
-  ['milk',       '牛奶',       { vol:+0.25, glu:+2.5, ca:+0.15, k:+0.05 }],
-  ['beer',       '啤酒',       { vol:+0.4, glu:+1.2 }],
-  ['wine',       '红酒',       { vol:+0.15, glu:+0.6 }],
-  ['vodka',      '伏特加',     { vol:+0.05, gcs:-1.5, glu:-0.3 }],
-  ['soup',       '汤',         { vol:+0.3, na:+2 }],
-  ['chicken',    '鸡肉',       { glu:+0.4 }],
-  ['pork',       '猪肉',       { glu:+0.5 }],
-  ['rice',       '米饭',       { glu:+6.5 }],
-  ['drink',      '饮料',       { vol:+0.3, glu:+3.5 }],
-  ['meat',       '肉类',       { glu:+0.5 }],
-  ['carb',       '碳水化合物', { glu:+8 }],
-  ['coffee',     '咖啡',       { vol:+0.25, hr:+6 }],
-  ['energy_drink','能量饮料',  { vol:+0.3, glu:+5, hr:+10 }],
-  ['orange_juice','橙汁',      { vol:+0.3, glu:+4.5, k:+0.15 }],
-  ['egg',        '鸡蛋',       { glu:+0.2 }],
-  ['salmon',     '三文鱼',     { glu:+0.2 }],
-  ['bread',      '面包',       { glu:+5 }],
-  ['apple',      '苹果',       { glu:+2.5, k:+0.08 }],
-  ['banana',     '香蕉',       { glu:+3.5, k:+0.25 }],
-  ['chocolate',  '巧克力',     { glu:+4, hr:+4 }],
-  ['nuts',       '坚果',       { glu:+0.6 }],
-  ['fruit',      '水果',       { glu:+3 }],
-  ['snack',      '零食',       { glu:+3.5, na:+3 }],
+  ['water',      '水',         { freeWater:+0.30, vol:+0.05 },        2],
+  ['cola',       '可乐',       { vol:+0.33, glu:+4.5, k:+0.03 },      5],
+  ['milk',       '牛奶',       { vol:+0.25, glu:+2.5, ca:+0.15, k:+0.05 }, 5],
+  ['beer',       '啤酒',       { vol:+0.4, glu:+1.2 },                8],
+  ['wine',       '红酒',       { vol:+0.15, glu:+0.6 },              18],
+  ['vodka',      '伏特加',     { vol:+0.05, gcs:-1.5, glu:-0.3 },    12],
+  ['soup',       '汤',         { vol:+0.3, na:+2 },                   5],
+  ['chicken',    '鸡肉',       { glu:+0.4 },                         12],
+  ['pork',       '猪肉',       { glu:+0.5 },                         12],
+  ['rice',       '米饭',       { glu:+6.5 },                         3],
+  ['drink',      '饮料',       { vol:+0.3, glu:+3.5 },                5],
+  ['meat',       '肉类',       { glu:+0.5 },                         12],
+  ['carb',       '碳水化合物', { glu:+8 },                           5],
+  ['coffee',     '咖啡',       { vol:+0.25, hr:+6 },                 12],
+  ['energy_drink','能量饮料',  { vol:+0.3, glu:+5, hr:+10 },          8],
+  ['orange_juice','橙汁',      { vol:+0.3, glu:+4.5, k:+0.15 },      6],
+  ['egg',        '鸡蛋',       { glu:+0.2 },                          2],
+  ['salmon',     '三文鱼',     { glu:+0.2 },                         24],
+  ['bread',      '面包',       { glu:+5 },                            5],
+  ['apple',      '苹果',       { glu:+2.5, k:+0.08 },                 4],
+  ['banana',     '香蕉',       { glu:+3.5, k:+0.25 },                 3],
+  ['chocolate',  '巧克力',     { glu:+4, hr:+4 },                     6],
+  ['nuts',       '坚果',       { glu:+0.6 },                          7],
+  ['fruit',      '水果',       { glu:+3 },                            5],
+  ['snack',      '零食',       { glu:+3.5, na:+3 },                   5],
 ];
 
 /* ---------- 词条（不可给予，仅查询） ---------- */
@@ -483,6 +496,7 @@ function build() {
         ...(x.infusionMinutes ? { infusionMinutes: x.infusionMinutes } : {}),
         ...(x.pumpHalfLife ? { pumpHalfLife: x.pumpHalfLife } : {}),
         ...(x.pumpStep ? { pumpStep: x.pumpStep } : {}),
+        ...(x.maxDose ? { maxDose: x.maxDose } : {}),
       }));
       item.route = item.routes[0].r;
       item.dose = item.routes[0].d;
@@ -497,15 +511,17 @@ function build() {
     out.push(item);
   }
   for (const [id, n, eff, opt] of (VIRUS_CELL || [])) {
+    // 病毒和细菌用于模拟暴露，费用为零。可输注的血液成分按默认剂量收费。
+    const cost = opt.cls === '血液成分' ? opt.cost : 0;
     out.push({ id, n, cls: opt.cls, route: opt.route || '静推', dose: opt.dose || 1,
                unit: opt.unit || '剂', onset: opt.on || 30, dur: opt.du || 480,
-               cost: 0, eff, note: opt.note || '', kind: opt.kind || 'virus',
+               cost, eff, note: opt.note || '', kind: opt.kind || 'virus',
                routes: [{ r: opt.route || '静推', d: opt.dose || 1, on: opt.on || 30, du: opt.du || 480 }],
                doseRange: [0.2, 10] });
   }
-  for (const [id, n, eff] of FOODS) {
+  for (const [id, n, eff, cost] of FOODS) {
     out.push({ id, n, cls: '食物/饮料', route: '口服', dose: 1, unit: '份',
-               onset: 20, dur: 120, cost: 5, eff, note: '', kind: 'food' });
+               onset: 20, dur: 120, cost, eff, note: '', kind: 'food' });
   }
   return out;
 }
@@ -527,6 +543,8 @@ const ALIASES = {
   '杜冷丁': '哌替啶',
   '吗啡注射液': '吗啡',
   '硝普钠针': '硝普钠',
+  '盐酸尼卡地平': '尼卡地平',
+  '左乙拉西坦注射液': '左乙拉西坦',
   '西地兰': '去乙酰毛花苷',
   '心律平': '普罗帕酮',
   '胺碘酮片': '胺碘酮',
