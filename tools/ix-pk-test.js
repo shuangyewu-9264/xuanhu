@@ -1,5 +1,6 @@
 ﻿/* 药物相互作用的 PK 时程回归测试 */
 require('../prototype/substances.js');
+require('../prototype/mentor.js');
 const CASEGEN = require('../prototype/generator.js');
 const E = require('../prototype/engine.js');
 const SHARE = require('../prototype/share.js');
@@ -97,6 +98,53 @@ const ok = (name, cond, detail) => { if (cond) { pass++; } else { fail++; consol
     action?.[4]?.minutes === 60 && action[4].unit === 'U');
 }
 
+/* 停掉同一时刻的其中一笔胰岛素医嘱，保存另一笔的完整输注。 */
+{
+  const spec = { id: 'infusion-stop-test', init: { ...CASEGEN.BASE } };
+  const S = E.create(spec);
+  E.give(S, 'insulin', 2, '泵入');
+  E.give(S, 'insulin', 2, '泵入');
+  const [first, second] = S.pk;
+  const charges = [S.cost, S.drugCost, S.given[1].cost];
+  for (let i = 0; i < 30; i++) E.tick(S, 60);
+  const activity = E.insulinActivity(S);
+  const otherBed = E.create(spec);
+  E.give(otherBed, 'insulin', 2, '泵入');
+  ok('只允许停当前床位的实际医嘱', !E.stopInfusion(otherBed, second) && !E.stopInfusion(S, { ...second }));
+  ok('停泵即刻保留胰岛素药效和已计费用',
+    E.stopInfusion(S, second) && !E.stopInfusion(S, second) &&
+    E.insulinActivity(S) === activity && E.infusionProgress(S, first).running &&
+    [S.cost, S.drugCost, S.given[1].cost].every((amount, i) => amount === charges[i]));
+  const stop = S.log.filter(([, line]) => line.startsWith('停止泵入 胰岛素'));
+  ok('同名医嘱按条停用并记录停泵时刻和已输量',
+    S.given[0].stoppedAt == null && S.given[1].stoppedAt === 1800 &&
+    stop.length === 1 && stop[0][1] === '停止泵入 胰岛素（医嘱 #2，已输 1 / 2 U）' &&
+    stop[0][3] === 1800 && stop[0][5] === true);
+  const restored = { ...JSON.parse(JSON.stringify(S)), cas: S.cas };
+  for (let i = 0; i < 31; i++) E.tick(restored, 60);
+  const completed = E.infusionProgress(restored, restored.given[0]);
+  const stopped = E.infusionProgress(restored, restored.given[1]);
+  const completeActivity = 0.2 * (90 / 60) * (1 - Math.exp(-60 / 90)) * Math.exp(-1 / 90);
+  const stoppedActivity = activity / 2 * Math.exp(-31 / 90);
+  ok('半程停泵存档重载后剂量维持在 1 U，只有另一条医嘱自动完成',
+    !stopped.running && stopped.elapsedMinutes === 30 && stopped.remainingMinutes === 0 && stopped.deliveredDose === 1 &&
+    !completed.running && completed.deliveredDose === 2 && !E.stopInfusion(restored, restored.pk[0]) &&
+    restored.log.filter(([, line]) => line.includes('胰岛素 泵入完成')).length === 1 &&
+    Math.abs(E.insulinActivity(restored) - completeActivity - stoppedActivity) < 1e-9);
+}
+
+/* 旧版相同时间、剂量的输注没有给药记录索引，也能单独停用。 */
+{
+  const S = E.create({ id: 'legacy-infusion-stop-test', init: { ...CASEGEN.BASE } });
+  E.give(S, 'insulin', 2, '泵入');
+  E.give(S, 'insulin', 2, '泵入');
+  for (const order of S.pk) delete order.givenIndex;
+  const [first, second] = S.pk;
+  ok('开单即停的旧医嘱留下零剂量记录',
+    E.stopInfusion(S, second) && S.given[0].stoppedAt == null && S.given[1].stoppedAt === 0 &&
+    E.infusionProgress(S, second).deliveredDose === 0 && E.infusionProgress(S, first).running);
+}
+
 /* 持续泵入沿模拟时钟生效，调速和停泵沿用当时的药物浓度。 */
 for (const [id, rate, unit, halfLife] of [
   ['dobutamine', 5, 'μg/kg/min', 2], ['isoproterenol', 1, 'μg/min', 3],
@@ -118,6 +166,7 @@ for (const [id, rate, unit, halfLife] of [
     E.dischargeCheck(S).reasons.some(reason => reason.includes(`泵入${sub.n}`)));
   for (let i = 0; i < 40; i++) E.tick(S, 60);
   const effect = E.pumpEffect(S, id);
+  const costBeforeAdjust = S.cost;
   ok(`${sub.n} 连续泵入超过既往单次疗程后仍生效`, S.t === 2400 &&
     effect > 0.99 && Object.entries(sub.eff).every(([key, value]) =>
       Math.abs(S.mod[key] - S.modBase[key] - value * effect) < 1e-9));
@@ -126,7 +175,7 @@ for (const [id, rate, unit, halfLife] of [
   ok(`${sub.n} 存档续接原泵速和药效，调速没有瞬时跳变`,
     E.pumpRate(restored, id) === rate && E.pumpEffect(restored, id) === effect &&
     E.give(restored, id, rate / 2) === rate / 2 && E.pumpEffect(restored, id) === effect &&
-    E.pumpRate(restored, id) === rate / 2 && restored.cost === cost);
+    E.pumpRate(restored, id) === rate / 2 && restored.cost === costBeforeAdjust);
   E.tick(restored, halfLife * 60);
   const adjusted = E.pumpEffect(restored, id);
   ok(`${sub.n} 降低泵速后药效逐渐减弱`, adjusted < effect && adjusted > 0.57);
@@ -165,6 +214,94 @@ for (const [id, rate, unit, halfLife] of [
   E.tick(S, 1);
   ok('停完循环支持泵后稳定满 15 分钟方可出院', justStopped?.remainingSeconds === 900 &&
     oneSecondLeft && observe()?.phase === 'complete' && E.dischargeCheck(S).ok);
+}
+
+/* 尼卡地平走降压泵路径，并影响高血压病例的床旁血管张力。 */
+{
+  const spec = CASEGEN.generate(2, 101, ['htnEmergency']);
+  const S = E.create(spec);
+  const control = E.create(spec);
+  const sub = SUBSTANCES.byId('nicardipine');
+  const startMap = E.bp(S).map;
+  ok('尼卡地平仅按合法静脉泵速开泵，带教识别高血压急症用药',
+    E.give(S, sub.id, 5, '静推') == null && E.give(S, sub.id, 15.1) == null &&
+    E.give(S, sub.id) === 5 && S.given[0].unit === 'mg/h' && E.pumpEffect(S, sub.id) === 0 &&
+    MENTOR.evaluate(S, 'drug', sub.id).ok);
+  for (let i = 0; i < 75; i++) {
+    for (const state of [S, control]) {
+      E.tick(state, 60);
+      CASEGEN.step(state, 60, E);
+    }
+    if (i === 59) ok('尼卡地平起始泵速在第一小时逐步降压',
+      E.bp(S).map < E.bp(control).map && E.bp(S).map >= startMap * 0.75 &&
+      S.eff.norepi === 0 && S.mod.svr < 0);
+  }
+  const check = E.dischargeCheck(S);
+  ok('尼卡地平持续控制血管张力，用泵时暂缓出院',
+    CASEGEN.vascularTone(S).controlled && !CASEGEN.vascularTone(control).controlled &&
+    check.reasons.some(reason => reason.includes('仍在持续静脉泵入尼卡地平')) &&
+    !check.circulationObservation);
+  ok('尼卡地平调速可到 15 mg/h，停泵后药效逐渐消退且无升压观察条件',
+    E.give(S, sub.id, 15, sub.route) === 15 &&
+    E.give(S, sub.id, 16, sub.route) == null && E.pumpRate(S, sub.id) === 15 &&
+    E.stopPump(S, sub.id) === 15 && E.pumpEffect(S, sub.id) > 0 &&
+    !E.dischargeCheck(S).circulationObservation);
+}
+
+/* 左乙拉西坦走定时静滴路径，止惊在输注过程中逐步起效。 */
+{
+  const spec = CASEGEN.generate(2, 101, ['seizure']);
+  const S = E.create(spec);
+  const control = E.create(spec);
+  const id = 'levetiracetam';
+  ok('左乙拉西坦仅按合法静滴剂量给药，带教优先提示一线止惊',
+    E.give(S, id, 2000, '静推') == null && E.give(S, id, 3001) == null &&
+    [0, -1, NaN].every(dose => E.give(S, id, dose) == null) && S.given.length === 0 &&
+    !MENTOR.evaluate(S, 'drug', id).ok);
+  for (const state of [S, control]) E.give(state, 'diazepam', 10);
+  ok('一线止惊后仍抽搐，左乙拉西坦开始静滴且无瞬时止惊',
+    MENTOR.hints(S).some(hint => hint.id === id) && MENTOR.evaluate(S, 'drug', id).ok &&
+    E.give(S, id) === 2000 && S.seizure === control.seizure &&
+    S.log[1][1] === '开始静滴 左乙拉西坦（总量 2000 mg，输注 15 分钟）');
+  for (let i = 0; i < 14; i++) {
+    for (const state of [S, control]) {
+      E.tick(state, 60);
+      CASEGEN.step(state, 60, E);
+    }
+    if (i === 0) ok('静滴初期仍可观察到抽搐', S.seizure < control.seizure &&
+      E.convulsionSigns(S) && S.mod.gcs < control.mod.gcs);
+  }
+  const restored = { ...JSON.parse(JSON.stringify(S)), cas: S.cas };
+  E.tick(restored, 60);
+  CASEGEN.step(restored, 60, E);
+  E.tick(restored, 60);
+  const completion = restored.log.filter(([, line]) => line.includes('左乙拉西坦 静滴完成'));
+  const order = SHARE.parse(SHARE.make(restored)).data?.a.find(([, , drug]) => drug === id);
+  ok('左乙拉西坦静滴止惊，存档续接准确记录完成时点和会诊途径',
+    !E.convulsionSigns(restored) && E.convulsionSigns(control) &&
+    completion.length === 1 && completion[0][3] === 900 &&
+    order?.[3] === 2000 && order[4]?.minutes === 15 && order[4]?.unit === 'mg' && order[4]?.route === '静滴');
+}
+
+/* 左乙拉西坦提前停用后，已输入的药量仍按延迟时间起效和衰减。 */
+{
+  const S = E.create({ id: 'seizure-infusion-stop-test', init: { ...CASEGEN.BASE, seizure: 0.9 } });
+  E.give(S, 'levetiracetam');
+  const [order] = S.pk;
+  E.tick(S, 60);
+  E.tick(S, 60);
+  const seizureBeforeStop = S.seizure;
+  ok('提前停止左乙拉西坦只记录部分剂量和需要显示的静滴途径',
+    E.stopInfusion(S, order) && S.seizure === seizureBeforeStop &&
+    S.log.at(-1)[1] === '停止静滴 左乙拉西坦（医嘱 #1，已输 266.667 / 2000 mg）');
+  E.tick(S, 60);
+  const gcsEffect = S.mod.gcs - S.modBase.gcs;
+  const seizureAfterLag = S.seizure;
+  for (let i = 0; i < 15; i++) E.tick(S, 60);
+  ok('左乙拉西坦只应用已送达的止惊剂量，既有意识效应逐渐减退',
+    seizureAfterLag < seizureBeforeStop && Math.abs(S.seizure - (0.9 - 0.65 * (2 / 15))) < 1e-9 &&
+    gcsEffect < 0 && S.mod.gcs - S.modBase.gcs > gcsEffect &&
+    !S.log.some(([, line]) => line.includes('静滴完成')));
 }
 
 /* 旧版血管加压素泵入医嘱仍按原定时程结束。 */
