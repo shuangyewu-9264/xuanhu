@@ -22,6 +22,9 @@ def version():
     match = re.search(r"^const APP_VERSION = '([^']+)';", game, re.MULTILINE)
     if not match:
         raise ValueError("prototype/game.js 缺少 APP_VERSION")
+    latest = re.search(r"^const RELEASES\s*=\s*\[\s*\{\s*v:\s*'([^']+)'", game, re.MULTILINE)
+    if not latest or latest[1] != match[1]:
+        raise ValueError("APP_VERSION 与最新更新记录的版本号必须完全一致")
     return match[1]
 
 
