@@ -23,7 +23,7 @@ const PAGES = [
       <div class="tut-row"><b>人体视图</b><span>点选器官，与旁边的器官参数对照</span></div>
       <div class="tut-row"><b>临床状态</b><span>点击状态标签可查阅相关解释</span></div>
       <div class="tut-row"><b>器官参数</b><span>随选中的器官切换，选中心脏可查看心电图</span></div>
-      <div class="tut-row"><b>底部操作</b><span>在「检查」开单或办理出院，在「报告」查看结果，在「操作 → 体温处置」进行物理降温或被动保暖。</span></div>`,
+      <div class="tut-row"><b>底部操作</b><span>在「检查」问病史、查体或开单，在「报告」复阅结果。出院在「菜单」第一项，降温和保暖位于「操作 → 体温处置」。</span></div>`,
   },
   {
     id: 'vitals', title: '指标怎么看', html: `
@@ -42,7 +42,7 @@ const PAGES = [
   {
     id: 'drugs', title: '怎么给药', html: `
       <div class="tut-h">四步</div>
-      <div class="tut-row"><b>1</b><span>点「给药」，搜索药名或按类别找</span></div>
+      <div class="tut-row"><b>1</b><span>点「给药」，展开「常用」「急救」或相应类别。也可直接搜索药名或别名。</span></div>
       <div class="tut-row"><b>2</b><span>点药名进详情，先看它的效应和注意事项</span></div>
       <div class="tut-row"><b>3</b><span>选给药途径（静推 / 口服 / 静滴…），不同途径起效和维持时间不同</span></div>
       <div class="tut-row"><b>4</b><span>调剂量（−/+ 或 0.5×/1×/2×/5×），然后给药</span></div>
@@ -55,7 +55,8 @@ const PAGES = [
       <div class="tut-row"><b>指标走势</b><span>血压、心率、血钾、血糖等随时间的变化曲线，用来判断"在变好还是变坏"。</span></div>
       <div class="tut-row"><b>术语表</b><span>65 条医学名词的解释和正常范围。点击界面上的状态标签、生命体征标签，也能直接看解释。</span></div>
       <div class="tut-row"><b>病房床位</b><span>最多同时管 4 张床，时间同步流逝。底部胶囊显示床位状态，点一下就能切换；哪个床出院或死亡，床位就空出来。</span></div>
-      <div class="tut-row"><b>统计</b><span>治愈率、平均耗时费用、最常遇到的诊断与最常犯的错。</span></div>
+      <div class="tut-row"><b>现实模式</b><span>医保与自付、真实出院、禁用暂停可独立开启。真实出院由你评估并签字，判定理由在结算时公布。禁用暂停时仍可选倍速或等待病情变化。</span></div>
+      <div class="tut-row"><b>统计</b><span>出院率、平均耗时费用、最常遇到的诊断与最常犯的错。</span></div>
       <div class="tut-row"><b>暂停</b><span>点击顶部倍速左侧的「暂停」，所有床位同时停表；点击「继续」恢复。</span></div>
       <div class="tut-note">可以随时从「病房」返回大厅查看床位。</div>`,
   },
