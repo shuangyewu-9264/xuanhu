@@ -812,6 +812,9 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
 }
 .lobby-release summary { min-height: 28px; align-content: center; color: var(--accent); cursor: pointer; }
 .lobby-release ul { padding-left: 18px; margin: 3px 0 2px; }
+.lobby-release-all { margin-top: 6px; padding: 7px 10px; width: 100%; text-align: left;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--card);
+  color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
 #lobby .foot { grid-area: foot; color: var(--ink-3); font-size: 12px; }
 
 @media (hover: hover) {
@@ -947,6 +950,7 @@ button.drow { width: 100%; border: 0; background: transparent; color: inherit; f
         <button type="button" data-act="download" hidden>下载离线版</button>
       </div>
       <details class="lobby-release"><summary></summary><ul></ul></details>
+      <button type="button" class="lobby-release-all" data-act="releases">查看全部更新历史</button>
     </aside>
     <p class="foot"></p>
   </div>
