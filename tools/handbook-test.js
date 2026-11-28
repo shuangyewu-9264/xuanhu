@@ -4,7 +4,7 @@
  * 用途：不需要浏览器，直接验证诊断分类器 / 行医手册 / 首次体征提示。
  *
  *   1) 生成 20 个不同 seed 的病例，各跑 10 分钟，打印分类表格人工核对；
- *   2) 模拟 3 局（治好 / 治死 / 中途放弃），验证手册累计与误治记录；
+ *   2) 模拟 4 局（治好 / 治死 / 中途放弃 / 出院失败），验证手册累计与误治记录；
  *   3) 验证 SIGNS.newOnes 首次返回全部、第二次返回空；
  *   4) 额外回归 5 个固定教学病例。
  *
@@ -188,7 +188,7 @@ check(nonEmpty === 20, `主诊断非空应为 20 例，实际 ${nonEmpty}`);
 check(shapeBad === 0, `返回结构异常 ${shapeBad} 例`);
 
 /* ---------------- 2. 手册累计 ---------------- */
-section('2. 行医手册：治好 / 治死 / 中途放弃');
+section('2. 行医手册：治好 / 治死 / 中途放弃 / 出院失败');
 H.clear();
 
 function highKCase(diff) {
@@ -226,17 +226,18 @@ const S3 = E.create(highKCase(3));
 advance(S3, 60);
 S3.running = false;
 rec(S3);
+rec({ ...S3, dischargeOutcome: { status: 'failed' } });
 
 const list = H.entries();
 check(list.length === 1, `手册应只有 1 个诊断条目，实际 ${list.length}`);
 const e = list[0] || {};
-console.log(`  条目：${e.name || '—'} · 遇到 ${e.encounters || 0} 次 · 治好 ${e.cured || 0} · 死亡 ${e.died || 0} · 未结 ${e.unknown || 0}`);
+console.log(`  条目：${e.name || '—'} · 遇到 ${e.encounters || 0} 次 · 治好 ${e.cured || 0} · 死亡 ${e.died || 0} · 出院失败 ${e.failed || 0} · 未结 ${e.unknown || 0}`);
 check(!!e.name, '手册条目缺少诊断名');
-check(e.encounters === 3, `遇到次数应为 3，实际 ${e.encounters}`);
-check(e.cured === 1 && e.died === 1 && e.unknown === 1,
-  `结局计数应为 1/1/1，实际 ${e.cured}/${e.died}/${e.unknown}`);
-check(Array.isArray(e.therapies) && e.therapies.length === 3,
-  `疗法记录应为 3 条，实际 ${(e.therapies || []).length}`);
+check(e.encounters === 4, `遇到次数应为 4，实际 ${e.encounters}`);
+check(e.cured === 1 && e.died === 1 && e.failed === 1 && e.unknown === 1,
+  `结局计数应为 1/1/1/1，实际 ${e.cured}/${e.died}/${e.failed}/${e.unknown}`);
+check(Array.isArray(e.therapies) && e.therapies.length === 4,
+  `疗法记录应为 4 条，实际 ${(e.therapies || []).length}`);
 check((e.therapies || []).every(t => Array.isArray(t.操作)),
   '疗法记录应兼容中文键「操作」');
 check((e.therapies || []).every(t => typeof t.耗时 === 'number'),
@@ -250,7 +251,7 @@ if (e.mistreatments && e.mistreatments[0]) {
 }
 check(Array.isArray(e.evidence) && e.evidence.length > 0, '证据链为空');
 const outcomeSet = (e.therapies || []).map(t => t.outcome).sort().join(',');
-check(outcomeSet === 'cured,died,unknown', `三局结局应为 cured/died/unknown，实际 ${outcomeSet}`);
+check(outcomeSet === 'cured,died,failed,unknown', `四局结局应为 cured/died/failed/unknown，实际 ${outcomeSet}`);
 const drugNames = JSON.stringify(e.therapies || []);
 check(/葡萄糖酸钙|calcium/.test(drugNames), '疗法记录里应出现实际给过的葡萄糖酸钙');
 check(/胰岛素|insulin/.test(drugNames), '疗法记录里应出现实际给过的胰岛素');
@@ -263,8 +264,8 @@ if (E.CASES && E.CASES.opioid) {
 
 const html = H.render();
 check(html.indexOf('这是你自己的记录，系统不会替你补全。') >= 0, '手册顶部缺少说明文案');
-check(html.indexOf('遇到 3 次') >= 0, '手册页未显示「遇到 3 次」');
-check(/治好 1/.test(html) && /死亡 1/.test(html), '手册页未显示治好/死亡计数');
+check(html.indexOf('遇到 4 次') >= 0, '手册页未显示「遇到 4 次」');
+check(/治好 1/.test(html) && /死亡 1/.test(html) && /出院失败 1/.test(html), '手册页未显示各结局计数');
 check(!/推荐疗法|标准治疗|首选治疗|建议使用/.test(html), '手册不应出现系统推荐/标准治疗文案');
 check(H.has('高钾血症') && H.has('highK') && !H.has('没见过的病'), 'HANDBOOK.has 判定异常');
 
@@ -289,9 +290,9 @@ check(H.entries().length === 0, '清空后手册应为空');
 const imported = H.import(exported);
 check(imported && imported.ok && imported.count === 1, '导入应成功并恢复 1 条');
 const again = H.entries()[0] || {};
-check(again.name === e.name && again.encounters === 3 && again.cured === 1 && again.died === 1,
+check(again.name === e.name && again.encounters === 4 && again.cured === 1 && again.died === 1 && H.stats().failed === 1,
   '导入后条目计数未恢复');
-check((again.therapies || []).length === 3, '导入后疗法记录未恢复');
+check((again.therapies || []).length === 4, '导入后疗法记录未恢复');
 check(again.note === '我的复盘：先看心电图，再补钙。', '导入后玩家备注未恢复');
 try {
   const raw = globalThis.localStorage.getItem('life.handbook');
