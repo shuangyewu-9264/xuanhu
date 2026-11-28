@@ -9,6 +9,9 @@
 /* 体内是否还有某物质的药效（与 generator.js 的 active() 保持一致） */
 const active = (S, id) => !!(S && S.pk && S.pk.some(p => p.id === id));
 const insulinActivity = S => root.LIFE?.insulinActivity?.(S) ?? S.eff.insulin;
+const SEIZURE_RESCUE_DOSE = { diazepam: 10, lorazepam: 4, midazolam: 10 };
+const triedSeizureRescue = S => (S.given || []).some(({ id, d, route }) =>
+  d >= SEIZURE_RESCUE_DOSE[id] && (route === '静推' || (id === 'midazolam' && route === '肌注')));
 
 const LEVELS = {
   learning:  { name:'学习',   detail: 3, auto: true,  note:'直接给答案，不计分、不解锁成就' },
@@ -177,8 +180,11 @@ const RULES = {
   ],
 
   seizure: [
-    { id:'benzo', when: S => (S.seizure || 0) > 0.2,
+    { id:'benzo', when: S => (S.seizure || 0) > 0.2 && !triedSeizureRescue(S),
       c:'抽搐超过 5 分钟不会自己停', d:'首选苯二氮卓止惊', s:'地西泮 10 mg 缓慢静推（或劳拉西泮 4 mg）' },
+    { id:'levetiracetam', when: S => S.seizure > 0.2 && triedSeizureRescue(S) && !active(S, 'levetiracetam'),
+      c:'一线止惊后仍有抽搐', d:'考虑加用二线抗癫痫药',
+      s:'左乙拉西坦 2000 mg 静滴 15 分钟，继续监测呼吸和意识' },
     { id:'oxygen', when: S => S.spo2 < 93 || (S.seizure || 0) > 0.3,
       c:'抽搐时呼吸做功与耗氧都剧增', d:'同时给氧', s:'高流量吸氧，必要时气管插管' },
     { id:'glucose', when: S => S.glu < 4,
@@ -351,7 +357,7 @@ const RULES = {
     { id:'sbp', when: S => (S.htn||0) > 0.6,
       c:'血压已达高血压急症水平，脑灌注随时出事',
       d:'需要静脉降压，平稳而不是骤降',
-      s:'硝普钠 0.5 μg/kg/min 泵入，或拉贝洛尔 10 mg 静推' },
+      s:'尼卡地平从 5 mg/h 持续静脉泵入，监测血压与心率后再调速' },
     { id:'target', when: S => (S.htn||0) > 0.35,
       c:'收缩压还没降到目标',
       d:'第一小时降幅别超过 25%',
@@ -467,6 +473,13 @@ function evaluate(S, kind, id, payload) {
       case 'norepi':
         if (s.vol < 4.0) return say(false, '容量没补足就上升压药，会掩盖问题');
         return say(true, '血管活性药使用合理');
+      case 'nicardipine':
+        if (!hasTag(s, 'htn') || root.LIFE.bp(s).sys <= 160) return say(false, '请先确认持续高血压及急性靶器官受损，再考虑静脉降压');
+        return say(true, '可用尼卡地平平稳降压，连续监测血压和心率');
+      case 'levetiracetam':
+        if (!hasTag(s, 'seizure') || s.seizure <= 0.2) return say(false, '请先确认仍有惊厥发作，再评估二线负荷治疗');
+        if (!triedSeizureRescue(s)) return say(false, '持续惊厥应先给予足量苯二氮卓，并监测呼吸');
+        return say(true, '一线治疗后仍有抽搐，可以加用二线止惊药');
       default:
         return say(true, '已执行');
     }
