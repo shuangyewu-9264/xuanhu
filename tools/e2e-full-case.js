@@ -30,9 +30,11 @@ async function main() {
     assert.equal(assessment.ok, true, assessment.reasons.join('、'));
     const warning = page.locator('#sevOk');
     if (await warning.isVisible()) await warning.click();
-    await page.locator('#btnBody').click();
+    await page.locator('#btnMenu').click();
     await rows.filter({ hasText: '办理出院' }).click();
     await page.waitForFunction(() => window.__LIFE_GAME.beds.length === 0);
+    await page.getByText('接诊病历', { exact: true }).click();
+    assert.match(await page.locator('.case-review-body details[open]').innerText(), /接诊首测/);
     await page.reload();
     const { records, entries } = await page.evaluate(() => ({
       records: JSON.parse(localStorage.getItem('life.records') || '[]'),
@@ -40,6 +42,8 @@ async function main() {
     }));
     assert.equal(records.length, 1, '一次出院应写入一份病历');
     assert.equal(records[0].结局, '出院');
+    assert.ok(records[0].入院记录.chief.sourceLabel);
+    assert.ok(Number.isFinite(records[0].入院记录.vitals.hr));
     assert.ok(entries.some(e => e.cured > 0), '手册应保存治愈记录');
     assert.deepEqual(errors, []);
     console.log('高钾教学病例通过：办理出院，刷新后保留一份病历和手册记录。');
