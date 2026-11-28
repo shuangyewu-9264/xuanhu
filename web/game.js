@@ -3140,7 +3140,7 @@ function openFeedback() {
 }
 
 /* ---------------- 版本 / 更新检查 ---------------- */
-const APP_VERSION = '1.56';
+const APP_VERSION = '1.57';
 const releaseRoot = document.querySelector('meta[name="xuanhu-release-root"]')?.content;
 const releaseBase = releaseRoot ? new URL(releaseRoot, location.href).href.replace(/\/$/, '') : '';
 const platformName = location.protocol === 'file:' ? '离线 HTML' :
@@ -3504,24 +3504,53 @@ function openConsult() {
 }
 
 /* ---------------- 术语表 ---------------- */
-function openGlossary(q) {
+let glossaryCat = '全部';
+(() => {
+  const st = document.createElement('style');
+  st.textContent = '.gl-cats{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px}'
+    + '.gl-cat{padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;'
+    + 'font:inherit;font-size:12px;color:#6b625d;cursor:pointer}'
+    + '.gl-cat.on{background:#a33;border-color:#a33;color:#fff}';
+  if (document.head) document.head.appendChild(st);
+})();
+
+function openGlossary(q, cat) {
   if (!window.GLOSSARY) { openDetail('术语表', '', [['状态', '术语模块未加载']], ''); return; }
-  const list = window.GLOSSARY.search(q || '');
-  openSheet('术语表', '点任意名词看解释', []);
+  const G = window.GLOSSARY;
+  const active = cat || glossaryCat || '全部';
+  glossaryCat = active;
+  let list = G.search(q || '');
+  if (active !== '全部') list = list.filter(t => (G.categoryOf ? G.categoryOf(t) : '') === active);
+  const cats = ['全部'].concat(Object.values(G.CATEGORIES || {}));
+  const counts = {};
+  for (const t of G.TERMS) {
+    const c = G.categoryOf ? G.categoryOf(t) : '其他';
+    counts[c] = (counts[c] || 0) + 1;
+  }
+  openSheet('术语表', G.TERMS.length + ' 条 · 点名词看解释', []);
   const host = document.querySelector('#sheetList');
   if (!host) return;
   host.innerHTML =
-    '<div style="padding:2px 12px 10px"><input id="glSearch" placeholder="搜索术语、缩写…" ' +
+    '<div style="padding:2px 12px 8px"><input id="glSearch" placeholder="搜索症状、疾病、药物、检查、玩法…" ' +
     'style="width:100%;padding:10px 12px;border-radius:11px;border:1px solid #e8e4e2;font:inherit;' +
     'font-size:14px;outline:none;background:#faf9f8" value="' + (q || '').replace(/"/g, '&quot;') + '"></div>' +
+    '<div class="gl-cats">' + cats.map(c =>
+      '<button type="button" class="gl-cat' + (c === active ? ' on' : '') + '" data-cat="' + c + '">' +
+      c + (c === '全部' ? '' : ' ' + (counts[c] || 0)) + '</button>').join('') + '</div>' +
     '<div id="glList">' + list.map(t =>
       '<div class="drow" data-t="' + t.n + '"><span class="nm">' + t.n +
       (t.abbr ? '<span style="font-size:10px;color:#b3a6a6"> · ' + t.abbr + '</span>' : '') +
       '</span><span class="amt" style="font-size:11px;color:#9a8f89">' + (t.normal || '') + '</span></div>'
     ).join('') + '</div>' +
     (list.length ? '' : '<div style="padding:18px;color:#9a9a9a;font-size:13px">没有匹配的术语</div>');
+  /* 不自动聚焦：平板/手机上会立刻弹软键盘挡住列表 */
+  host.scrollTop = 0;
+  if (host.parentElement) host.parentElement.scrollTop = 0;
   const inp = host.querySelector('#glSearch');
-  if (inp) inp.addEventListener('input', () => openGlossary(inp.value));
+  if (inp) inp.addEventListener('input', () => openGlossary(inp.value, active));
+  host.querySelectorAll('[data-cat]').forEach(el => {
+    el.addEventListener('click', () => openGlossary(q, el.dataset.cat));
+  });
   host.querySelectorAll('[data-t]').forEach(el => {
     el.addEventListener('click', () => {
       const card = window.GLOSSARY.renderCard(el.dataset.t);
@@ -4138,6 +4167,12 @@ function renderAll() {
 
 /* 更新公告：每次发版在这里加一条（新的放最前面） */
 const RELEASES = [
+  { v: '1.57', notes: [
+    '术语表扩到 450+ 条：新增疾病 37、体征 82、查体与检查 36，药物覆盖全部 190 种',
+    '术语表可按分类筛选、支持中文名与英文 id 搜索（如 meropenem）',
+    '教程扩到 14 页：完整接诊流程、十个新手坑、一局高钾实例',
+    '更新记录新增「查看全部更新历史」，可翻阅所有历史版本',
+  ] },
   { v: '1.56', notes: [
     '高级设备按床启停：VA/VV-ECMO、CRRT 与连续脑电按模拟时间计费，另可申请肺动脉导管取栓。',
     '新增定向救援药、对应病例和床旁快速血气；支付明细区分游戏内全自费与部分支付，家庭可承受预算分布更广。',
@@ -4270,6 +4305,16 @@ const RELEASES = [
   ] },
 ];
 
+/* ---------------- 更新历史（可查阅全部版本） ---------------- */
+function openReleases() {
+  const rows = [];
+  for (const rel of RELEASES) {
+    rows.push({ sec: 'v' + rel.v + (rel.v === RELEASES[0].v ? ' · 当前版本' : '') });
+    for (const note of rel.notes) rows.push({ n: note, tag: '', amt: '' });
+  }
+  openSheet('更新记录', RELEASES.length + ' 个版本 · 从新到旧', rows);
+}
+
 /* ---------------- 大厅（过渡页） ---------------- */
 function bindLobby() {
   const lobby = $('#lobby');
@@ -4283,6 +4328,7 @@ function bindLobby() {
     diff: () => openSheet('难度设置', '病例与指导', difficultyRows()),
     tutorial: () => TUTORIAL.open(0),
     reset: confirmSaveReset,
+    releases: openReleases,
   };
   lobby.addEventListener('click', event => {
     const button = event.target.closest('button');
@@ -4430,7 +4476,7 @@ try {
 } catch (e) {}
 requestAnimationFrame(loop);
 window.__showLobby = showLobby; window.__hideLobby = hideLobby; window.__checkBudget = checkBudget; window.openChart = openChart; window.openStats = openStats;
-window.__LIFE_GAME = { get S() { return S; }, get beds() { return beds; }, get activeIdx() { return activeIdx; }, E, startCase, openAdmission, openBeds, switchBed, showAdmissionIntro };
+window.__LIFE_GAME = { get S() { return S; }, get beds() { return beds; }, get activeIdx() { return activeIdx; }, E, openGlossary, openHandbook, startCase, openAdmission, openBeds, switchBed, showAdmissionIntro };
 })();
 
 
