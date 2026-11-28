@@ -350,6 +350,16 @@ function traceOne(mod, mode, seed) {
 }
 
 if (require.main === module) {
+  for (const sub of substances.ALL) {
+    const exposure = sub.cls === '病毒' || sub.cls === '细菌';
+    assert.ok(Number.isFinite(sub.cost) && (exposure ? sub.cost === 0 : sub.cost > 0),
+      `物质 ${sub.id} 缺少有效模拟费用`);
+  }
+  for (const [cell, product] of [['c_rbc', 'prbc'], ['c_plasma', 'ffp']]) {
+    const unit = substances.byId(cell);
+    const pack = substances.byId(product);
+    assert.equal(unit.cost / unit.dose, pack.cost / pack.dose, `${cell} 与 ${product} 的单位费用应一致`);
+  }
   assert.deepEqual(substances.search('罗氏芬').map(s => s.id), ['ceftriaxone']);
   for (const [brand, generic] of [['先锋必', '头孢哌酮'], ['泰能', '亚胺培南/西司他丁']]) {
     assert.deepEqual(substances.search(brand), [], brand + ' 不可代开其他药物');
