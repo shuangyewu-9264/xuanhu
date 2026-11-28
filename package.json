@@ -2,8 +2,8 @@
   "name": "xuanhu",
   "private": true,
   "scripts": {
-    "test": "node tools/monotonic.js && node tools/mechanism-test.js && node tools/regression-physio.js && node tools/content-test.js && node tools/ix-pk-test.js && node tools/hint-audit.js && node tools/ecg-test.js",
-    "test:browser": "node tools/e2e-full-case.js"
+    "test": "node tools/monotonic.js && node tools/mechanism-test.js && node tools/regression-physio.js && node tools/content-test.js && node tools/intake-test.js && node tools/exams-test.js && node tools/ix-pk-test.js && node tools/drug-billing-test.js && node tools/hint-audit.js && node tools/ecg-test.js",
+    "test:browser": "node tools/e2e-full-case.js && node tools/ed-intake-ui.js && node tools/realism-rules-ui.js && node tools/drugtabs_test.js && node tools/bedside-menu-ui.js"
   },
   "devDependencies": {
     "playwright-core": "1.65.1"
